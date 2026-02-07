@@ -7,7 +7,7 @@ WESAD_dataset_path = r'C:\Users\amenp\Downloads\WESAD'
 
 # Signal Parameters
 FS_dict = {'ACC': 32, 'BVP': 64, 'EDA': 4, 'TEMP': 4}
-WINDOW_SIZE = 120 # seconds - Increased from 60 for longer context
+WINDOW_SIZE = 60  # seconds - Optimal for dataset size and accuracy balance
 WINDOW_SHIFT = 0.25 # seconds (overlap)
 
 # Training Hyperparameters

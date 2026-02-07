@@ -1,0 +1,61 @@
+# Add after the existing multimodal_ensemble mode and before if __name__ == "__main__"
+
+    elif args.mode == 'smote':
+        print("\n" + "="*80)
+        print("SMOTE OVERSAMPLING MODE")
+        print("="*80)
+        
+        from data.dataset import load_wesad_data, WESADDataset
+        from training.train_smote import train_classifier_with_smote
+        
+        # Load data
+        subject_data = load_wesad_data(WESAD_dataset_path)
+        
+        # Split subjects into train/test
+        subject_ids = list(subject_data.keys())
+        split_idx = int(0.8 * len(subject_ids))
+        train_subject_ids = subject_ids[:split_idx]
+        test_subject_ids = subject_ids[split_idx:]
+        
+        train_subjects = {sid: subject_data[sid] for sid in train_subject_ids}
+        test_subjects = {sid: subject_data[sid] for sid in test_subject_ids}
+        
+        # Create datasets
+        train_dataset = WESADDataset(train_subjects, mode='classifier')
+        test_dataset = WESADDataset(test_subjects, mode='classifier')
+        
+        train_loader_eval = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        test_loader_eval = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+        
+        # Load pre-trained encoder
+        encoder = Encoder(input_channels=3).to(device)
+        encoder.load_state_dict(torch.load('stress_detection/models/encoder_pretrained.pth'))
+        
+        # Train with SMOTE
+        classifier, best_acc = train_classifier_with_smote(
+            train_loader_eval, test_loader_eval, encoder, num_classes=3, 
+            epochs=args.epochs, device=device
+        )
+        
+        print(f"\nSMOTE Training Complete! Best Accuracy: {best_acc*100:.2f}%")
+    
+    elif args.mode == 'loso':
+        print("\n" + "="*80)
+        print("LEAVE-ONE-SUBJECT-OUT CROSS-VALIDATION")
+        print("="*80)
+        
+        from data.dataset import load_wesad_data
+        from training.train_loso import leave_one_subject_out_cv
+        
+        # Load data
+        subject_data = load_wesad_data(WESAD_dataset_path)
+        
+        # Run LOSO CV
+        results, avg_acc, avg_f1 = leave_one_subject_out_cv(
+            subject_data, Encoder, num_classes=3, 
+            epochs=args.epochs, device=device
+        )
+        
+        print(f"\nLOSO CV Complete!")
+        print(f"Average Accuracy: {avg_acc*100:.2f}%")
+        print(f"Average F1 Score: {avg_f1:.4f}")

@@ -13,8 +13,10 @@ echo 3. Calculate Model Accuracy (Evaluate - Standard Encoder)
 echo 4. Train Ensemble (5 models for better accuracy)
 echo 5. Train Multi-Modal Fusion (Separate encoders per modality)
 echo 6. FULL PIPELINE - All Improvements Combined
+echo 7. SMOTE Oversampling (Fix Class Imbalance)
+echo 8. Leave-One-Subject-Out CV (Gold Standard Evaluation)
 echo.
-set /p choice="Enter choice (1-6): "
+set /p choice="Enter choice (1-8): "
 
 if "%choice%"=="1" goto option1
 if "%choice%"=="2" goto option2
@@ -22,6 +24,8 @@ if "%choice%"=="3" goto option3
 if "%choice%"=="4" goto option4
 if "%choice%"=="5" goto option5
 if "%choice%"=="6" goto option6
+if "%choice%"=="7" goto option7
+if "%choice%"=="8" goto option8
 goto invalid
 
 :option1
@@ -77,10 +81,30 @@ echo.
 echo ========================================
 echo   FULL PIPELINE COMPLETE
 echo ========================================
+echo ========================================
+goto end
+
+:option7
+echo Training with SMOTE Oversampling...
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode smote --epochs 100 --batch_size 32
+goto end
+
+:option8
+echo.
+echo ========================================
+echo   LEAVE-ONE-SUBJECT-OUT CV
+echo ========================================
+echo This will train and test on EACH subject
+echo Estimated time: 3-6 hours (15 subjects)
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size 32
 goto end
 
 :invalid
-echo Invalid choice. Please run again and select 1-6.
+echo Invalid choice. Please run again and select 1-8.
 goto end
 
 :end

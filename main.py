@@ -15,8 +15,8 @@ from stress_detection.utils.config import *
 def main():
     parser = argparse.ArgumentParser(description="Self-Supervised Stress Detection")
     parser.add_argument('--mode', type=str, default='pretrain', 
-                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble'], 
-                       help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best)')
+                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble', 'smote', 'loso'], 
+                       help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best), smote (SMOTE oversampling), loso (Leave-One-Subject-Out CV)')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='Batch size')
     args = parser.parse_args()
@@ -268,59 +268,88 @@ def main():
             classifier_path = 'stress_detection/models/classifier_best.pth'
             if os.path.exists(classifier_path):
                 classifier.load_state_dict(torch.load(classifier_path))
-            
             torch.save({
                 'encoder': multimodal_encoder.state_dict(),
                 'classifier': classifier.state_dict()
             }, model_path)
             print(f"Saved model to {model_path}")
             
-            ensemble_models.append((multimodal_encoder, classifier))
+            models.append((multimodal_encoder, classifier))
         
         # Evaluate ensemble
         print(f"\n{'='*60}")
         print("Evaluating Multi-Modal Ensemble")
         print(f"{'='*60}")
-        
-        from sklearn.metrics import accuracy_score, f1_score
-        from tqdm import tqdm
-        import numpy as np
-        
-        all_targets = []
-        all_ensemble_preds = []
-        
-        for data, target in tqdm(test_loader_eval, desc="Ensemble Evaluation"):
-            data = data.to(device)
-            target = target.squeeze().cpu().numpy()
-            
-            # Get predictions from all models
-            model_predictions = []
-            for encoder, classifier in ensemble_models:
-                encoder.eval()
-                classifier.eval()
-                with torch.no_grad():
-                    features = encoder(data)
-                    output = classifier(features)
-                    pred = torch.softmax(output, dim=1).cpu().numpy()
-                    model_predictions.append(pred)
-            
-            # Average predictions
-            ensemble_pred = np.mean(model_predictions, axis=0)
-            ensemble_pred = np.argmax(ensemble_pred, axis=1)
-            
-            all_targets.extend(target)
-            all_ensemble_preds.extend(ensemble_pred)
-        
-        ensemble_acc = accuracy_score(all_targets, all_ensemble_preds)
-        ensemble_f1 = f1_score(all_targets, all_ensemble_preds, average='weighted')
+        ensemble_acc, ensemble_f1 = evaluate_ensemble(test_loader_eval, models, device)
         
         print(f"\n{'='*60}")
         print("FINAL RESULTS - Multi-Modal Ensemble")
         print(f"{'='*60}")
-        print(f"Ensemble Accuracy: {ensemble_acc:.2%}")
+        print(f"Ensemble Accuracy: {ensemble_acc*100:.2f}%")
         print(f"Ensemble F1 Score: {ensemble_f1:.4f}")
-        print(f"Number of Models: {num_models}")
-        print(f"{'='*60}")
+        print(f"Number of Models: {len(models)}")
+        print(f"Number of Models: {len(ensemble_models)}")
+        print("="*60)
+    
+    elif args.mode == 'smote':
+        print("\n" + "="*80)
+        print("SMOTE OVERSAMPLING MODE")
+        print("="*80)
+        
+        from training.train_smote import train_classifier_with_smote
+
+
+        
+        # Load data
+        subject_data = load_wesad_data(WESAD_dataset_path)
+        
+        # Split subjects into train/test
+        subject_ids = list(subject_data.keys())
+        split_idx = int(0.8 * len(subject_ids))
+        train_subject_ids = subject_ids[:split_idx]
+        test_subject_ids = subject_ids[split_idx:]
+        
+        train_subjects = {sid: subject_data[sid] for sid in train_subject_ids}
+        test_subjects = {sid: subject_data[sid] for sid in test_subject_ids}
+        
+        # Create datasets
+        train_dataset = WESADDataset(train_subjects, mode='classifier')
+        test_dataset = WESADDataset(test_subjects, mode='classifier')
+        
+        train_loader_eval = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        test_loader_eval = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+        
+        # Load pre-trained encoder
+        encoder = Encoder(input_channels=3).to(device)
+        encoder.load_state_dict(torch.load('stress_detection/models/encoder_pretrained.pth'))
+        
+        # Train with SMOTE
+        classifier, best_acc = train_classifier_with_smote(
+            train_loader_eval, test_loader_eval, encoder, num_classes=3, 
+            epochs=args.epochs, device=device
+        )
+        
+        print(f"\nSMOTE Training Complete! Best Accuracy: {best_acc*100:.2f}%")
+    
+    elif args.mode == 'loso':
+        print("\n" + "="*80)
+        print("LEAVE-ONE-SUBJECT-OUT CROSS-VALIDATION")
+        print("="*80)
+        
+        from training.train_loso import leave_one_subject_out_cv
+        
+        # Load data
+        subject_data = load_wesad_data(WESAD_dataset_path)
+        
+        # Run LOSO CV
+        results, avg_acc, avg_f1 = leave_one_subject_out_cv(
+            subject_data, Encoder, num_classes=3, 
+            epochs=args.epochs, device=device
+        )
+        
+        print(f"\nLOSO CV Complete!")
+        print(f"Average Accuracy: {avg_acc*100:.2f}%")
+        print(f"Average F1 Score: {avg_f1:.4f}")
 
 if __name__ == "__main__":
     main()
