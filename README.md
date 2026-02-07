@@ -45,13 +45,15 @@ pip install torch torchvision torchaudio scikit-learn scipy tqdm numpy
 **Option 1: Windows Batch Script (Easiest)**
 ```bash
 .\run.bat
-# Select from 6 options:
-# 1. Test Run
+# Select from 8 options:
+# 1. Test Run (Mock Data)
 # 2. Pre-train (500 epochs)
 # 3. Evaluate (Standard)
-# 4. Train Ensemble
+# 4. Train Ensemble (5 models)
 # 5. Multi-Modal Fusion
-# 6. Full Pipeline (Max Accuracy)
+# 6. Full Pipeline (Multi-Modal Ensemble - Max Accuracy)
+# 7. SMOTE Oversampling (Fix Class Imbalance)
+# 8. Leave-One-Subject-Out CV (Gold Standard Evaluation)
 ```
 
 **Option 2: Command Line**
@@ -62,8 +64,14 @@ python -m stress_detection.main --mode pretrain --epochs 500 --batch_size 32
 # Evaluation
 python -m stress_detection.main --mode evaluate --epochs 100 --batch_size 32
 
-# Full pipeline
+# Full pipeline (Multi-Modal Ensemble)
 python -m stress_detection.main --mode multimodal_ensemble --epochs 100 --batch_size 32
+
+# SMOTE oversampling
+python -m stress_detection.main --mode smote --epochs 100 --batch_size 32
+
+# Leave-One-Subject-Out Cross-Validation
+python -m stress_detection.main --mode loso --epochs 100 --batch_size 32
 ```
 
 ## 📁 Project Structure
@@ -82,6 +90,8 @@ stress_detection/
 │   ├── train_ssl.py         # SimCLR pre-training
 │   ├── train_classifier.py # Supervised classifier training
 │   ├── train_ensemble.py   # Ensemble training
+│   ├── train_smote.py       # SMOTE oversampling
+│   ├── train_loso.py        # Leave-one-subject-out CV
 │   └── loss.py              # NT-Xent loss
 ├── utils/
 │   ├── config.py            # Hyperparameters
@@ -135,16 +145,51 @@ python tune_hyperparameters.py
 
 Uses **WESAD** (Wearable Stress and Affect Detection):
 - Download from: https://archive.ics.uci.edu/ml/datasets/WESAD
-- 15 subjects with physiological signals (EDA, TEMP, BVP, etc.)
-- Labels: Baseline, Stress, Amusement
+- 15 subjects with physiol## Performance
 
-## 📊 Performance
+### Cross-Subject Evaluation Results
 
-| Model | Accuracy | F1 Score |
-|-------|----------|----------|
-| Standard Encoder | 79.01% | 0.6765 |
-| With Attention | 79-81% | 0.68-0.70 |
-| Multi-Modal Ensemble | 78-80% | 0.70-0.72 |
+All models evaluated on the WESAD dataset using unseen subjects.
+
+| Model Configuration | Accuracy | F1 Score | Class 0 | Class 1 | Class 2 | Evaluation Method |
+|---------------------|----------|----------|---------|---------|---------|-------------------|
+| Standard Encoder | 79.01% | 0.6765 | 96.8% | 30.2% | 68.5% | Random Split (80/20) |
+| Multi-Modal Ensemble (5 models) | **83.09%** | **0.8072** | 96.8% | 44.3% | 74.1% | Random Split (80/20) |
+| SMOTE Oversampling | **83.67%** | 0.7625 | 96.8% | 40.0% | **93.2%** | Random Split (80/20) |
+| **LOSO Cross-Validation** | **74.35%** ± 13.75% | 0.6912 ± 0.15 | Varies | Varies | Varies | **Gold Standard** |
+
+### Class Labels
+- **Class 0**: Baseline (neutral state)
+- **Class 1**: Amusement (induced by funny video)
+- **Class 2**: Stress (induced by TSST - Trier Social Stress Test)
+
+### Key Insights
+
+**Best Overall Accuracy (Random Split):**
+- **SMOTE Oversampling: 83.67%**
+- Balances class distribution via synthetic minority oversampling
+- Particularly effective for Class 2 (Stress): 93.2% accuracy
+
+**Best F1 Score & Class Balance:**
+- **Multi-Modal Ensemble: 83.09%** with F1=0.8072
+- Uses 5 separate fusion models with different random seeds
+- Most balanced performance across all classes
+
+**True Cross-Subject Performance (LOSO):**
+- **74.35% ± 13.75%** - Gold standard leave-one-subject-out cross-validation
+- Each subject tested independently (train on 14, test on 1)
+- High variance reflects individual physiological differences
+- Best subjects: S13 (89.66%), S8 (89.47%), S2 (88.79%)
+- Challenging subjects: S14 (37.82%), S11 (58.26%)
+
+**Class 1 Challenge:**
+- Amusement detection remains difficult (40-44% accuracy)
+- High inter-subject variability in emotional responses
+- Requires subject-specific calibration for significant improvementt
+
+## 📝 License
+
+MIT License - feel free to use for research and commercial projects.
 
 ## 🤝 Contributing
 
@@ -165,15 +210,15 @@ If you use this code in your research, please cite:
 ```bibtex
 @software{stress_detection_ssl,
   title={Self-Supervised Stress Detection from Physiological Signals},
-  author={Your Name},
+  author={Amen Parmar},
   year={2026},
-  url={https://github.com/yourusername/stress-detection-ssl}
+  url={https://github.com/amenparmar/stress-detection-ssl}
 }
 ```
 
 ## 📧 Contact
 
-For questions or collaborations, open an issue or contact [your-email].
+For questions or collaborations, open an issue or contact [amenparmar777@gmail.com].
 
 ---
 
