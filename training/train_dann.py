@@ -12,8 +12,7 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 
 def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=15, 
-               epochs=200, device='cpu', lr=3e-4, alpha=0.1,
-               early_stopping_patience=10, use_lr_scheduler=True):
+               epochs=100, device='cpu', lr=3e-4, alpha=0.1):
     """
     Train encoder with Domain Adversarial Neural Network (DANN).
     
@@ -30,12 +29,10 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
         encoder: Feature encoder (e.g., Encoder or MultiModalFusionEncoder)
         num_classes: Number of stress classes (default: 3)
         num_subjects: Number of subjects/domains (default: 15 for WESAD)
-        epochs: Maximum number of training epochs (default 200)
+        epochs: Number of training epochs
         device: Training device
         lr: Learning rate
         alpha: Weight for adversarial loss (default: 0.1)
-        early_stopping_patience: Stop if no improvement for N epochs (default 10)
-        use_lr_scheduler: Enable learning rate scheduling (default True)
     
     Returns:
         Tuple of (encoder, stress_classifier, best_test_accuracy)
@@ -47,27 +44,17 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
     domain_classifier = DomainClassifier(input_dim=256, num_subjects=num_subjects).to(device)
     stress_classifier = nn.Linear(256, num_classes).to(device)
     
-    # Optimizers with stronger regularization
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-4)
-    domain_optimizer = optim.Adam(domain_classifier.parameters(), lr=lr, weight_decay=1e-4)
-    stress_optimizer = optim.Adam(stress_classifier.parameters(), lr=lr, weight_decay=1e-4)
-    
-    # Learning rate schedulers
-    if use_lr_scheduler:
-        encoder_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            encoder_optimizer, mode='max', factor=0.5, patience=5
-        )
-        stress_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            stress_optimizer, mode='max', factor=0.5, patience=5
-        )
+    # Optimizers
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-5)
+    domain_optimizer = optim.Adam(domain_classifier.parameters(), lr=lr, weight_decay=1e-5)
+    stress_optimizer = optim.Adam(stress_classifier.parameters(), lr=lr, weight_decay=1e-5)
     
     # Loss functions
     stress_criterion = nn.CrossEntropyLoss()
     domain_criterion = nn.CrossEntropyLoss()
     
-    # Metrics tracking with early stopping
+    # Metrics tracking
     best_test_acc = 0.0
-    patience_counter = 0
     
     print("\n" + "="*80)
     print("DOMAIN ADVERSARIAL NEURAL NETWORK (DANN) TRAINING")
@@ -194,28 +181,13 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
             print(f"  Test F1 Score: {test_f1:.4f}")
             print(f"  Subject-Invariance Score: {domain_invariance:.4f} (higher = better)")
             
-            # Save best model and check early stopping
+            # Save best model
             if test_acc > best_test_acc:
                 best_test_acc = test_acc
-                patience_counter = 0  # Reset patience
                 os.makedirs('stress_detection/models', exist_ok=True)
                 torch.save(encoder.state_dict(), 'stress_detection/models/encoder_dann.pth')
                 torch.save(stress_classifier.state_dict(), 'stress_detection/models/classifier_dann.pth')
                 print(f"  ✓ New best model saved! Accuracy: {best_test_acc*100:.2f}%")
-            else:
-                patience_counter += 1
-                print(f"  No improvement. Patience: {patience_counter}/{early_stopping_patience}")
-            
-            # Learning rate scheduling
-            if use_lr_scheduler:
-                encoder_scheduler.step(test_acc)
-                stress_scheduler.step(test_acc)
-            
-            # Early stopping check
-            if patience_counter >= early_stopping_patience:
-                print(f"\n⚠️ Early stopping triggered! No improvement for {early_stopping_patience} epochs.")
-                print(f"Best accuracy reached at earlier epoch: {best_test_acc*100:.2f}%")
-                break
         
         print("="*80)
     
