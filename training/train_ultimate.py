@@ -14,8 +14,9 @@ from sklearn.metrics import accuracy_score, f1_score
 
 
 def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_subjects=15,
-                        epochs=100, device='cpu', lr=3e-4, 
-                        alpha=0.1, beta=0.05, gamma=0.05, delta=0.02):
+                        epochs=200, device='cpu', lr=3e-4, 
+                        alpha=0.1, beta=0.05, gamma=0.05, delta=0.02,
+                        early_stopping_patience=10, use_lr_scheduler=True):
     """
     ULTIMATE PERFORMANCE: Train with ALL advanced techniques combined.
     
@@ -34,13 +35,15 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
         encoder: Feature encoder (Multi-Modal Fusion recommended)
         num_classes: Number of stress classes (3)
         num_subjects: Number of subjects for domain classifier
-        epochs: Training epochs
+        epochs: Maximum training epochs (default 200)
         device: Training device
         lr: Learning rate
         alpha: Weight for adversarial loss
         beta: Weight for invariant losses
         gamma: Weight for trajectory loss
         delta: Weight for temporal consistency loss
+        early_stopping_patience: Stop if no improvement for N epochs (default 10)
+        use_lr_scheduler: Enable learning rate scheduling (default True)
     
     Returns:
         Tuple of (encoder, classifier, trajectory_analyzer, best_test_accuracy)
@@ -73,17 +76,28 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
         contrastive_weight=0.03
     ).to(device)
     
-    # Optimizers
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-5)
-    domain_optimizer = optim.Adam(domain_classifier.parameters(), lr=lr)
-    classifier_optimizer = optim.Adam(classifier.parameters(), lr=lr)
-    trajectory_optimizer = optim.Adam(trajectory_analyzer.parameters(), lr=lr)
+    # Optimizers with weight decay for regularization
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-4)
+    domain_optimizer = optim.Adam(domain_classifier.parameters(), lr=lr, weight_decay=1e-4)
+    classifier_optimizer = optim.Adam(classifier.parameters(), lr=lr, weight_decay=1e-4)
+    trajectory_optimizer = optim.Adam(trajectory_analyzer.parameters(), lr=lr, weight_decay=1e-4)
+    
+    # Learning rate schedulers
+    if use_lr_scheduler:
+        encoder_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            encoder_optimizer, mode='max', factor=0.5, patience=5
+        )
+        classifier_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            classifier_optimizer, mode='max', factor=0.5, patience=5
+        )
     
     # Loss functions
     class_criterion = nn.CrossEntropyLoss()
     domain_criterion = nn.CrossEntropyLoss()
     
+    # Early stopping
     best_test_acc = 0.0
+    patience_counter = 0
     prev_features = None
     
     for epoch in range(epochs):
@@ -264,14 +278,29 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             print(f"  Test F1 Score: {test_f1:.4f}")
             print(f"  Subject-Invariance: {invariance_score:.4f}")
             
-            # Save best model
+            # Save best model and check early stopping
             if test_acc > best_test_acc:
                 best_test_acc = test_acc
+                patience_counter = 0  # Reset patience
                 os.makedirs('stress_detection/models', exist_ok=True)
                 torch.save(encoder.state_dict(), 'stress_detection/models/encoder_ultimate.pth')
                 torch.save(classifier.state_dict(), 'stress_detection/models/classifier_ultimate.pth')
                 torch.save(trajectory_analyzer.state_dict(), 'stress_detection/models/trajectory_ultimate.pth')
                 print(f"  ✓ New best model saved! Accuracy: {best_test_acc*100:.2f}%")
+            else:
+                patience_counter += 1
+                print(f"  No improvement. Patience: {patience_counter}/{early_stopping_patience}")
+            
+            # Learning rate scheduling
+            if use_lr_scheduler:
+                encoder_scheduler.step(test_acc)
+                classifier_scheduler.step(test_acc)
+            
+            # Early stopping check
+            if patience_counter >= early_stopping_patience:
+                print(f"\n⚠️ Early stopping triggered! No improvement for {early_stopping_patience} epochs.")
+                print(f"Best accuracy: {best_test_acc*100:.2f}%")
+                break
         
         print("="*80)
     
