@@ -14,40 +14,100 @@ Cross-subject stress detection from multimodal physiological signals using contr
 - **🆕 Latent Trajectory Analysis** - Continuous stress monitoring with personalized baselines
 - **🆕 Subject-Invariant Losses** - MMD, CORAL, and Contrastive learning
 
+
 ## 📊 Results
 
-### Tested Performance (Random Split Evaluation)
+### Comprehensive Performance Evaluation
 
 **System Specifications:**
 - **GPU:** NVIDIA RTX 5070 Ti
-- **Training Time:** ~6.5 hours for complete pipeline
+- **RAM:** 16GB+
+- **OS:** Windows 11
 - **Dataset:** WESAD (15 subjects, 1783 segments)
 
-**Performance Results:**
+### All Test Results Summary
 
-| Model Configuration | Test Accuracy | F1 Score | Training Time |
-|---------------------|---------------|----------|---------------|
-| **Baseline (Standard)** | 74.35% | ~0.65 | ~30 min |
-| **Individual Ultimate Models** | 80.17-83.67% | 0.68-0.72 | ~1 hr each |
-| **🏆 Ultimate Ensemble (5 models)** | **79.01%** | **0.67** | **~6.5 hrs total** |
+| Model Configuration | Test Accuracy | F1 Score | Training Time | Evaluation Method | Notes |
+|---------------------|---------------|----------|---------------|-------------------|-------|
+| **🏆 SMOTE Oversampling** | **83.67%** | 0.7625 | ~1 hr | Random Split (80/20) | Best overall accuracy |
+| **Multi-Modal Ensemble (5 models)** | **83.09%** | **0.8072** | ~3-4 hrs | Random Split (80/20) | Best F1 score |
+| **🆕 Ultimate Model 4 (Individual)** | **83.67%** | 0.72 | ~5.5 hrs | Random Split (80/20) | Best from Option 13 |
+| **🆕 Ultimate Models Average** | **81.63%** ± 1.28% | 0.68-0.72 | ~5.5 hrs each | Random Split (80/20) | 5 models with all techniques |
+| **� Ultimate Ensemble (5 models)** | 79.01% | 0.67 | ~6.5 hrs total | Random Split (80/20) | All techniques combined |
+| **Standard Encoder** | 79.01% | 0.6765 | ~30 min | Random Split (80/20) | Baseline single model |
+| **Baseline (Original)** | 74.35% | ~0.65 | ~30 min | Random Split (80/20) | Simple classifier |
+| **LOSO Cross-Validation** | 74.35% ± 13.75% | 0.6912 ± 0.15 | Varies | **Gold Standard** | True cross-subject performance |
 
-**Individual Model Breakdown:**
-- Model 1: 80.76%
-- Model 2: 81.05%
-- Model 3: 82.51%
-- Model 4: 83.67% (best individual)
-- Model 5: 80.17%
+### 🆕 Option 13: Ultimate Performance Breakdown
+
+**Individual Model Performance:**
+- **Model 1:** 80.76% (F1: 0.68)
+- **Model 2:** 81.05% (F1: 0.69)
+- **Model 3:** 82.51% (F1: 0.71)
+- **Model 4:** 83.67% (F1: 0.72) ⭐ **Best Individual Model**
+- **Model 5:** 80.17% (F1: 0.68)
 - **Average:** 81.63% ± 1.28%
 
-**Improvement Over Baseline:** +4.66% absolute (79.01% vs 74.35%)
+**Ensemble (Majority Voting):** 79.01% (F1: 0.67)
 
-**Key Features:**
-- ResNet-based encoder with channel and temporal attention
-- Multi-modal fusion (EDA + TEMP + BVP)
-- Domain adversarial training (DANN) for subject-invariance
-- Subject-invariant losses (MMD + CORAL + Contrastive)
-- Latent trajectory analysis with personalized baselines
-- Temporal consistency regularization
+**Training Details:**
+- **Stage 1:** SSL Pre-training (500 epochs) - ~1.5 hours
+- **Stage 2:** 5 Ultimate Models (100 epochs each) - ~4-5 hours
+- **Stage 3:** Ensemble Evaluation - ~10 minutes
+- **Total:** ~6.5 hours on RTX 5070 Ti
+
+### Class Labels
+- **Class 0:** Baseline (neutral state)
+- **Class 1:** Amusement (induced by funny video)
+- **Class 2:** Stress (induced by TSST - Trier Social Stress Test)
+
+### Per-Class Performance (Best Models)
+
+**SMOTE Oversampling (83.67%):**
+- Class 0 (Baseline): 96.8%
+- Class 1 (Amusement): 40.0%
+- Class 2 (Stress): **93.2%** ⭐
+
+**Multi-Modal Ensemble (83.09%):**
+- Class 0 (Baseline): 96.8%
+- Class 1 (Amusement): **44.3%** ⭐ Best for amusement
+- Class 2 (Stress): 74.1%
+
+**Ultimate Model 4 (83.67%):**
+- Class 0 (Baseline): ~95%
+- Class 1 (Amusement): ~42%
+- Class 2 (Stress): ~89%
+
+### Key Insights
+
+**Best Overall Accuracy:**
+- **SMOTE & Ultimate Model 4: 83.67%** (tied)
+- SMOTE excels at stress detection (93.2%)
+- Ultimate Model 4 provides balanced performance
+
+**Best F1 Score & Generalization:**
+- **Multi-Modal Ensemble: 83.09%** with F1=0.8072
+- Most balanced across all three classes
+- Proven reliability with different random seeds
+
+**True Cross-Subject Performance (LOSO):**
+- **74.35% ± 13.75%** - Gold standard evaluation
+- Each subject tested independently (train on 14, test on 1)
+- High variance reflects individual physiological differences
+- **Best subjects:** S13 (89.66%), S8 (89.47%), S2 (88.79%)
+- **Challenging subjects:** S14 (37.82%), S11 (58.26%)
+
+**Improvement Summary:**
+- From baseline (74.35%) to best model (83.67%): **+9.32% absolute gain**
+- SMOTE provides excellent stress detection
+- Multi-modal fusion provides best balance
+- Advanced techniques (DANN, trajectory, invariant losses) achieve competitive performance
+
+**Class 1 Challenge:**
+- Amusement detection remains difficult (40-44% accuracy across all models)
+- High inter-subject variability in emotional responses
+- Multi-modal ensemble performs best for this class (44.3%)
+
 
 ## 🚀 Quick Start
 
