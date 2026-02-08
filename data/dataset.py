@@ -54,6 +54,7 @@ class WESADDataset(Dataset):
         self.mode = mode
         self.data_segments = []
         self.labels = []
+        self.subject_ids = []  # Store subject IDs for domain adversarial training
         
         # Load and process data
         print(f"Processing data for {len(subject_data)} subjects...")
@@ -68,8 +69,12 @@ class WESADDataset(Dataset):
         Normalization is applied per subject before segmentation.
         """
         # Iterate over each subject's data
+        # Create subject ID mapping (S2 -> 0, S3 -> 1, etc.)
+        subject_id_map = {sid: idx for idx, sid in enumerate(sorted(subject_data.keys()))}
+        
         for subject_id, data in subject_data.items():
             print(f"Processing subject {subject_id}...")
+            numeric_subject_id = subject_id_map[subject_id]
             # Signal Data
             try:
                 raw_eda = data['signal']['wrist']['EDA'].flatten()
@@ -157,6 +162,7 @@ class WESADDataset(Dataset):
 
                 self.data_segments.append(segment)
                 self.labels.append(majority_label)
+                self.subject_ids.append(numeric_subject_id)  # Store subject ID
                 count += 1
             
             print(f"  Label distribution: {label_distribution}")
@@ -169,6 +175,7 @@ class WESADDataset(Dataset):
         # Shape: (Time, Channels) -> Transpose to (Channels, Time) for PyTorch Conv1D
         data = torch.FloatTensor(self.data_segments[idx]).transpose(0, 1)
         label = self.labels[idx]
+        subject_id = self.subject_ids[idx]
         
         # Remap labels to zero-indexed for classifier mode
         # WESAD labels: 1=baseline, 2=stress, 3=amusement
@@ -176,5 +183,7 @@ class WESADDataset(Dataset):
         if self.mode == 'classifier':
             label = label - 1  # Map 1→0, 2→1, 3→2
         
-        label = torch.LongTensor([label])
-        return data, label
+        label = torch.LongTensor([label]).squeeze()
+        subject_id = torch.LongTensor([subject_id]).squeeze()
+        
+        return data, label, subject_id

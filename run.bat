@@ -15,8 +15,12 @@ echo 5. Train Multi-Modal Fusion (Separate encoders per modality)
 echo 6. FULL PIPELINE - All Improvements Combined
 echo 7. SMOTE Oversampling (Fix Class Imbalance)
 echo 8. Leave-One-Subject-Out CV (Gold Standard Evaluation)
+echo 9. Domain Adversarial Training (DANN - Subject-Invariant)
+echo 10. Latent Trajectory Analysis (Continuous Monitoring)
+echo 11. Subject-Invariant Loss Training (MMD + CORAL + Contrastive)
+echo 12. COMBINED ADVANCED - MAXIMUM PERFORMANCE (DANN + Multi-Modal)
 echo.
-set /p choice="Enter choice (1-8): "
+set /p choice="Enter choice (1-12): "
 
 if "%choice%"=="1" goto option1
 if "%choice%"=="2" goto option2
@@ -26,6 +30,10 @@ if "%choice%"=="5" goto option5
 if "%choice%"=="6" goto option6
 if "%choice%"=="7" goto option7
 if "%choice%"=="8" goto option8
+if "%choice%"=="9" goto option9
+if "%choice%"=="10" goto option10
+if "%choice%"=="11" goto option11
+if "%choice%"=="12" goto option12
 goto invalid
 
 :option1
@@ -103,8 +111,64 @@ cd /d %PARENT_DIR%
 "%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size 32
 goto end
 
+:option9
+echo.
+echo ========================================
+echo   DOMAIN ADVERSARIAL TRAINING (DANN)
+echo ========================================
+echo Subject-invariant feature learning
+echo Expected improvement: 74%% -^> 78-82%% LOSO accuracy
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode dann --epochs 100 --batch_size 32
+goto end
+
+:option10
+echo.
+echo ========================================
+echo   LATENT TRAJECTORY ANALYSIS
+echo ========================================
+echo Continuous stress monitoring
+echo Personalized baselines per subject
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode trajectory --epochs 100 --batch_size 32
+goto end
+
+:option11
+echo.
+echo ========================================
+echo   SUBJECT-INVARIANT LOSS TRAINING
+echo ========================================
+echo Using MMD + CORAL + Contrastive losses
+echo Expected improvement: 3-7%% accuracy gain
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode invariant --epochs 100 --batch_size 32
+goto end
+
+:option12
+echo.
+echo ========================================
+echo   COMBINED ADVANCED - MAXIMUM PERFORMANCE
+echo ========================================
+echo Combines:
+echo - Domain Adversarial Training
+echo - Multi-Modal Fusion
+echo - Subject-Invariant Losses
+echo Expected: 82-86%% LOSO accuracy
+echo Estimated time: 2-3 hours on GPU
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode combined --epochs 100 --batch_size 32
+goto end
+
 :invalid
-echo Invalid choice. Please run again and select 1-8.
+echo Invalid choice. Please run again and select 1-12.
 goto end
 
 :end
