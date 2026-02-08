@@ -99,21 +99,25 @@ class TrajectoryAnalyzer(nn.Module):
         Returns:
             Deviation magnitudes (Batch,)
         """
-        deviations = torch.zeros(features.size(0), device=features.device)
+        deviations = []
         
-        for i, subject_id in enumerate(subject_ids):
-            subject_id = subject_id.item()
+        for i in range(features.size(0)):
+            subject_id = subject_ids[i].item()
             
+            # Get baseline for this subject
             if subject_id in self.subject_baselines:
                 baseline = self.subject_baselines[subject_id]
-                # L2 distance from baseline
+                # Ensure baseline is on the same device as features
+                baseline = baseline.to(features.device)
+                
+                # Compute L2 deviation from baseline
                 deviation = torch.norm(features[i] - baseline, p=2)
-                deviations[i] = deviation
             else:
-                # No baseline available - use zero deviation
-                deviations[i] = 0.0
+                # No baseline yet, use zero deviation
+                deviation = torch.tensor(0.0, device=features.device)
+            deviations.append(deviation)
         
-        return deviations
+        return torch.stack(deviations)
     
     def apply_temporal_smoothing(self, deviations):
         """

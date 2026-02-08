@@ -27,7 +27,13 @@ def train_simclr(train_loader, encoder, projection_head, optimizer, scheduler, c
         total_loss = 0
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
         
-        for batch_idx, (data, _) in enumerate(progress_bar):
+        for batch_idx, batch_data in enumerate(progress_bar):
+            # Handle both old format (data, label) and new format (data, label, subject_id)
+            if len(batch_data) == 3:
+                data, _, _ = batch_data  # Ignore labels and subject_ids for SSL
+            else:
+                data, _ = batch_data
+            
             data = data.to(device) # Shape: (Batch, Channels, Time)
             
             # Apply augmentations to get two different views
