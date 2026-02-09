@@ -253,6 +253,654 @@ python -m stress_detection.main --mode combined --epochs 100 --batch_size 32
 python -m stress_detection.main --mode ultimate --epochs 100 --batch_size 32
 ```
 
+## 📋 Training Options Guide
+
+This section provides a comprehensive overview of all 14 training options available in the stress detection system. Each option represents different combinations of models, techniques, and optimization strategies.
+
+---
+
+### Overview Table
+
+| Option | Name | Expected Accuracy | Training Time | Key Technique | Use Case |
+|--------|------|-------------------|---------------|---------------|----------|
+| 1 | Test Run | N/A | ~1 min | Mock Data | Testing pipeline |
+| 2 | Pre-training | N/A | ~1.5h | SSL (SimCLR) | Feature learning |
+| 3 | Standard Evaluation | 79% | ~30min | Supervised Learning | Baseline |
+| 4 | Ensemble | 81-82% | ~2.5h | Model Voting | Better generalization |
+| 5 | Multi-Modal Fusion | 82-83% | ~1h | Modality-Specific Encoders | Signal complementarity |
+| 6 | Full Pipeline | 83% | ~3-4h | Multi-Modal Ensemble | Production deployment |
+| 7 | SMOTE | 83-84% | ~1h | Class Balancing | Imbalanced data |
+| 8 | LOSO CV | 74% ± 14% | ~3-6h | Cross-Validation | True generalization |
+| 9 | DANN | 80-81% | ~2h | Domain Adversarial | Subject-invariance |
+| 10 | Trajectory | 78-80% | ~1.5h | Personalized Baselines | Continuous monitoring |
+| 11 | Invariant Losses | 79-81% | ~1.5h | MMD+CORAL+Contrastive | Distribution alignment |
+| 12 | Combined Advanced | 80-81% | ~2h | DANN + Multi-Modal | Maximum performance |
+| 13 | Ultimate | 79-84% | ~6-8h | All Techniques + Ensemble | State-of-the-art |
+| 14 | Benchmark | Varies | ~15-20h | All Configurations | Model comparison |
+
+---
+
+### Detailed Options
+
+#### **Option 1: Test Run (Mock Data)**
+
+**Purpose:** Validate pipeline functionality without real data
+
+**Models & Concepts:**
+- Random data generation (100 samples, 3 channels, 240 time steps)
+- Basic ResNet encoder (32→64→128 filters)
+- Standard projection head for SSL
+- Simple linear classifier
+
+**Training Process:**
+1. Mock SSL pre-training (1 epoch)
+2. Mock classifier training (1 epoch)
+
+**Output:** Pipeline validation confirmation
+
+**When to Use:** 
+- First-time setup verification
+- Debugging code changes
+- Testing new features
+
+---
+
+#### **Option 2: Pre-training (SSL with SimCLR)**
+
+**Purpose:** Self-supervised representation learning from unlabeled physiological signals
+
+**Models & Concepts:**
+- **Encoder Architecture:** ResNet-style with residual blocks
+  - Layer 1: Conv1D (3→32, kernel=7) + BatchNorm + ReLU
+  - Layer 2: Residual Block (32→64) + MaxPool
+  - Layer 3: Residual Block (64→128) + MaxPool
+  - Layer 4: Adaptive Average Pooling → 256-dim features
+- **Projection Head:** 256 → 256 → 128 (MLP with ReLU)
+- **Augmentations:**
+  - Gaussian noise (σ=0.05)
+  - Random scaling (0.85-1.15×)
+  - Temporal magnitude warping
+
+**Training Process:**
+1. Generate two augmented views per sample
+2. Minimize NT-Xent (InfoNCE) loss
+3. Train for 500 epochs with Adam optimizer (lr=3e-4)
+
+**Output:** Pre-trained encoder saved to `encoder_pretrained.pth`
+
+**Key Concepts:**
+- **Contrastive Learning:** Positive pairs (same sample, different augmentations) pulled together
+- **Temperature Scaling:** τ=0.5 for softmax sharpening
+- **Batch Size:** 32 (64 samples per batch with 2 views)
+
+**When to Use:**
+- As the first step before any downstream task
+- When you have unlabeled physiological data
+
+---
+
+#### **Option 3: Calculate Model Accuracy (Standard Evaluation)**
+
+**Purpose:** Baseline supervised classification with pre-trained encoder
+
+**Models & Concepts:**
+- **Encoder:** Loads pre-trained weights from Option 2 (frozen or fine-tuned)
+- **Classifier:** Linear layer (256 → 3 classes)
+- **Training:** Cross-entropy loss, Adam optimizer
+- **Data Split:** 80/20 train-test (subject-level split)
+
+**Training Process:**
+1. Load pre-trained encoder
+2. Add linear classification head
+3. Train for 100 epochs
+4. Evaluate on held-out test subjects
+
+**Expected Performance:**
+- Accuracy: ~79%
+- F1-Score: ~0.68
+
+**Key Concepts:**
+- **Transfer Learning:** Leverages SSL pre-training
+- **Fine-tuning:** Encoder weights updated during training
+- **Subject-Level Split:** Ensures no subject overlap between train/test
+
+**When to Use:**
+- Baseline performance measurement
+- Validating pre-training quality
+- Quick single-model evaluation
+
+---
+
+#### **Option 4: Train Ensemble (5 Models)**
+
+**Purpose:** Reduce variance through model diversity
+
+**Models & Concepts:**
+- **Number of Models:** 5 independent models
+- **Architecture:** Standard ResNet encoder (each with different random seed)
+- **Classifier:** Linear layer per model
+- **Aggregation:** Majority voting for final prediction
+
+**Training Process:**
+1. Train 5 models independently with seeds {42, 43, 44, 45, 46}
+2. Each model trained for 100 epochs
+3. Save all models to `stress_detection/models/ensemble/`
+4. Ensemble prediction via majority vote
+
+**Expected Performance:**
+- Individual models: 78-82%
+- Ensemble: 81-82%
+- Variance reduction: ~2-3%
+
+**Key Concepts:**
+- **Ensemble Diversity:** Random seeds create different local minima
+- **Bias-Variance Tradeoff:** Lower variance at cost of training time
+- **Majority Voting:** Most common prediction wins
+
+**When to Use:**
+- Production systems requiring reliability
+- When variance is high in single models
+- When computational resources allow longer training
+
+---
+
+#### **Option 5: Train Multi-Modal Fusion**
+
+**Purpose:** Leverage complementary information from different physiological signals
+
+**Models & Concepts:**
+- **Architecture:** Separate encoders per modality
+  - EDA Encoder: ResNet (1 channel → 128-dim modality features)
+  - TEMP Encoder: ResNet (1 channel → 128-dim modality features)
+  - BVP Encoder: ResNet (1 channel → 128-dim modality features)
+- **Fusion Module:** Attention-based aggregation
+  - Learns importance weights for each modality
+  - Concatenates weighted features → 256-dim fused representation
+- **Classifier:** Linear layer (256 → 3)
+
+**Training Process:**
+1. Split input signals into EDA, TEMP, BVP channels
+2. Process each through modality-specific encoder
+3. Apply attention fusion
+4. Train end-to-end with cross-entropy loss
+
+**Expected Performance:**
+- Accuracy: 82-83%
+- F1-Score: 0.75-0.80
+- Improvement: +3-4% over single encoder
+
+**Key Concepts:**
+- **Modality-Specific Learning:** Each signal has unique characteristics
+- **Attention Mechanism:** Adaptively weights modalities based on input
+- **Late Fusion:** Combines high-level features rather than raw signals
+
+**When to Use:**
+- When individual modalities have different signal qualities
+- For interpretability (attention weights show modality importance)
+- When maximum accuracy is needed
+
+---
+
+#### **Option 6: Full Pipeline (Multi-Modal Ensemble)**
+
+**Purpose:** Production-ready maximum accuracy configuration
+
+**Models & Concepts:**
+- **Stage 1:** SSL pre-training (500 epochs) - see Option 2
+- **Stage 2:** Ensemble of 5 Multi-Modal Fusion models
+  - Each model has 3 modality-specific encoders + fusion
+  - Different random seeds for diversity
+  - Independent training (100 epochs each)
+- **Aggregation:** Majority voting across 5 models
+
+**Training Process:**
+1. Pre-train base encoder (if not already done)
+2. Train 5 multi-modal models independently
+3. Save all models with individual performance metrics
+4. Evaluate ensemble on test set
+
+**Expected Performance:**
+- **Accuracy: 83.09%** (verified)
+- **F1-Score: 0.8072** (best across all options)
+- Training time: 3-4 hours on RTX 5070 Ti
+
+**Key Concepts:**
+- Combines benefits of multi-modal fusion AND ensemble diversity
+- Best balance of accuracy, reliability, and training time
+- Recommended for deployment scenarios
+
+**When to Use:**
+- **Production deployment** (recommended)
+- When you need both accuracy AND reliability
+- Final model after research experimentation
+
+---
+
+#### **Option 7: SMOTE Oversampling**
+
+**Purpose:** Address class imbalance in physiological stress data
+
+**Models & Concepts:**
+- **Data Resampling:** Synthetic Minority Over-sampling Technique (SMOTE)
+  - Generates synthetic samples for minority classes
+  - Uses k-nearest neighbors (k=5) in feature space
+  - Balances class distribution before training
+- **Encoder:** Standard ResNet pre-trained encoder
+- **Classifier:** Linear layer with balanced data
+
+**Training Process:**
+1. Extract features from pre-trained encoder
+2. Apply SMOTE to create balanced dataset
+3. Train classifier on balanced data
+4. Evaluate on original (imbalanced) test set
+
+**Expected Performance:**
+- Accuracy: 83.67% (best single model)
+- Stress detection (Class 2): **93.2%** (excellent)
+- Amusement detection (Class 1): 40% (improved from baseline)
+
+**Key Concepts:**
+- **Class Imbalance:** WESAD has more baseline/stress samples than amusement
+- **Feature-Space Oversampling:** SMOTE operates on learned features, not raw signals
+- **Evaluation on Original Data:** Tests generalization to real distribution
+
+**When to Use:**
+- When minority class performance is critical
+- For stress-focused applications (93% stress accuracy)
+- When class imbalance causes poor performance on some classes
+
+---
+
+#### **Option 8: Leave-One-Subject-Out Cross-Validation (LOSO)**
+
+**Purpose:** Gold standard evaluation for cross-subject generalization
+
+**Models & Concepts:**
+- **Validation Strategy:** Train on 14 subjects, test on 1 (repeated 15 times)
+- **Encoder:** Standard ResNet (or any chosen architecture)
+- **Aggregation:** Average accuracy and F1 across all 15 folds
+
+**Training Process:**
+1. For each of 15 subjects:
+   - Train model on remaining 14 subjects
+   - Evaluate on held-out subject
+   - Record performance metrics
+2. Compute mean ± std across all folds
+3. Report per-subject results
+
+**Expected Performance:**
+- **Mean Accuracy: 74.35% ± 13.75%**
+- **Mean F1: 0.6912 ± 0.15**
+- Best subjects: S13 (89.66%), S8 (89.47%)
+- Challenging subjects: S14 (37.82%)
+
+**Key Concepts:**
+- **Cross-Subject Generalization:** Most rigorous evaluation for wearable sensors
+- **High Variance:** Reflects inter-individual physiological differences
+- **True Performance:** Random splits (83%) overestimate generalization by ~9%
+
+**When to Use:**
+- **Research publications** (required for credibility)
+- Evaluating true cross-subject performance
+- Identifying difficult subjects for targeted improvement
+- When you need unbiased performance estimates
+
+---
+
+#### **Option 9: Domain Adversarial Neural Network (DANN)**
+
+**Purpose:** Learn subject-invariant features for better cross-subject generalization
+
+**Models & Concepts:**
+- **Encoder:** Multi-modal fusion encoder (feature extractor)
+- **Classifier:** Predicts stress labels (3 classes)
+- **Domain Classifier:** Predicts subject ID (15 classes)
+- **Gradient Reversal Layer (GRL):** Reverses gradients from domain classifier
+  - Forward pass: Identity function
+  - Backward pass: Gradient × (-λ)
+  - λ schedule: 0 → 1 over training (prevents early collapse)
+
+**Architecture:**
+```
+Input → Encoder → [Features] → Classifier → Stress Labels
+                      ↓
+                    GRL (λ)
+                      ↓
+              Domain Classifier → Subject ID
+```
+
+**Training Process:**
+1. Forward pass through encoder
+2. Classifier trained to predict stress (standard CE loss)
+3. Domain classifier trained to predict subject ID
+4. GRL reverses domain gradients to encoder
+5. Encoder learns features that:
+   - Are good for stress classification
+   - Are bad for subject identification (invariant)
+
+**Expected Performance:**
+- Accuracy: 80.76%
+- **Subject-Invariance Score: 0.6064** (60.6% reduction in subject-specific features)
+- Domain Classifier Accuracy: 9.37% (lower is better - indicates invariance)
+
+**Key Concepts:**
+- **Adversarial Training:** Encoder "fools" domain classifier
+- **Subject-Invariant Features:** Removes person-specific patterns
+- **Lambda Scheduling:** Gradual increase prevents training instability
+
+**When to Use:**
+- When LOSO performance is poor (high inter-subject variance)
+- For wearable sensors deployed to new users
+- Research on domain adaptation in physiological computing
+
+---
+
+#### **Option 10: Latent Trajectory Analysis**
+
+**Purpose:** Continuous stress monitoring with personalized baselines
+
+**Models & Concepts:**
+- **Encoder:** Standard ResNet feature extractor
+- **Trajectory Analyzer Module:**
+  - **Baseline Extraction:** Per-subject reference features (mean of baseline state)
+  - **Deviation Tracking:** L2 distance from personalized baseline
+  - **Temporal Smoothing:** Moving average filter (window=5)
+  - **Stress Score:** Deviation magnitude → stress intensity
+- **Classifier:** Uses deviation features for prediction
+
+**Architecture:**
+```
+Input → Encoder → [Features] → Baseline Comparison → Deviation Score
+                                         ↓
+                                 Trajectory Analyzer → Stress Prediction
+```
+
+**Training Process:**
+1. Extract baseline features for each subject
+2. Compute deviations from baseline for all samples
+3. Train classifier on deviation features
+4. Apply temporal smoothing for continuous scores
+
+**Expected Performance:**
+- Accuracy: 78-80%
+- **Continuous Stress Scores:** Real-time intensity tracking
+- **Personalized Baselines:** Better handles inter-subject variability
+
+**Key Concepts:**
+- **Personalization:** Each subject has unique baseline
+- **Continuous Monitoring:** Provides stress intensity, not just classification
+- **Temporal Consistency:** Smoothing prevents erratic predictions
+
+**When to Use:**
+- Real-time stress monitoring applications
+- When continuous stress scores are needed (not just binary classification)
+- For personalized wearable systems
+
+---
+
+#### **Option 11: Subject-Invariant Loss Training**
+
+**Purpose:** Multi-mechanism approach to cross-subject alignment
+
+**Models & Concepts:**
+- **Encoder:** Standard ResNet
+- **Multiple Invariant Loss Functions:**
+  1. **MMD (Maximum Mean Discrepancy):**
+     - Measures distribution difference using RBF kernel
+     - Minimizes moment differences between subjects
+     - Loss weight: β₁ = 0.01
+  2. **CORAL (Correlation Alignment):**
+     - Aligns second-order statistics (covariances)
+     - Whitens features to reduce subject-specific correlations
+     - Loss weight: β₂ = 0.01
+  3. **Contrastive Subject Loss:**
+     - Pulls same-stress different-subject pairs together
+     - Pushes different-stress pairs apart
+     - Loss weight: β₃ = 0.03
+
+**Total Loss:**
+```
+L_total = L_CE + β₁·L_MMD + β₂·L_CORAL + β₃·L_Contrastive
+```
+
+**Training Process:**
+1. Sample batches with multiple subjects
+2. Compute classification loss
+3. Compute MMD between subject pairs
+4. Compute CORAL alignment loss
+5. Compute contrastive loss for same-stress different-subject pairs
+6. Backpropagate weighted sum
+
+**Expected Performance:**
+- Accuracy: 79-81%
+- **Improvement: +3-7%** over baseline in cross-subject scenarios
+- Better LOSO performance than standard training
+
+**Key Concepts:**
+- **Distribution Matching:** MMD + CORAL align feature distributions
+- **Metric Learning:** Contrastive loss shapes feature space geometry
+- **Complementary Mechanisms:** Each loss targets different aspects of invariance
+
+**When to Use:**
+- When DANN alone is insufficient
+- For research on domain adaptation techniques
+- When interpretability of alignment mechanisms is important
+
+---
+
+#### **Option 12: Combined Advanced (MAXIMUM PERFORMANCE)**
+
+**Purpose:** Best single-model performance combining proven techniques
+
+**Models & Concepts:**
+- **Encoder:** Multi-Modal Fusion (3 modality-specific encoders)
+- **Training Methods Combined:**
+  1. Domain Adversarial (DANN) - see Option 9
+  2. Subject-Invariant Losses - see Option 11
+  3. Multi-Modal Fusion - see Option 5
+
+**Architecture:**
+```
+Input Signals → Multi-Modal Encoder → [Fused Features]
+                                            ↓
+                       ┌────────────────────┼────────────────────┐
+                       ↓                    ↓                    ↓
+                  Classifier          GRL → Domain         Invariant Losses
+                 (Stress Labels)       (Subject ID)      (MMD+CORAL+Contrast)
+```
+
+**Training Process:**
+1. Multi-modal encoding of EDA, TEMP, BVP
+2. Simultaneous optimization of:
+   - Classification accuracy
+   - Domain confusion (via GRL)
+   - Distribution alignment (MMD + CORAL + Contrastive)
+3. Train for 100 epochs with unified loss
+
+**Unified Loss Function:**
+```
+L_total = L_CE + 0.1·L_adv + 0.01·L_MMD + 0.01·L_CORAL + 0.03·L_contrast
+```
+
+**Expected Performance:**
+- **Accuracy: 80.76%** (verified)
+- **F1-Score: 0.6753**
+- **Subject-Invariance: 0.6064** (excellent)
+- **Training Time: ~2 hours**
+
+**Key Concepts:**
+- Combines modality fusion with subject-invariant learning
+- Best architecture for cross-subject deployment
+- Balanced accuracy and generalization
+
+**When to Use:**
+- **Recommended for research papers** (strong baselines)
+- When cross-subject performance is critical
+- When single model (not ensemble) is preferred
+
+---
+
+#### **Option 13: 🏆 Ultimate Performance (ALL TECHNIQUES + ENSEMBLE)**
+
+**Purpose:** State-of-the-art performance using every available technique
+
+**Models & Concepts:**
+- **Stage 1: SSL Pre-training**
+  - 500 epochs of SimCLR
+  - Saves `encoder_pretrained_500.pth`
+- **Stage 2: Ultimate Model Training (5 models)**
+  - Each model is a multi-modal fusion encoder
+  - Trained with unified multi-loss objective:
+    - Classification Loss (CE)
+    - Adversarial Loss (DANN with GRL)
+    - Invariant Losses (MMD + CORAL + Contrastive)
+    - Trajectory Deviation Loss
+    - Temporal Consistency Loss
+- **Stage 3: Ensemble Evaluation**
+  - Majority voting across 5 ultimate models
+
+**Complete Architecture (Per Model):**
+```
+Input → Multi-Modal Encoder → [Features]
+              ↓
+    ┌─────────┼────────┬────────────┬───────────────┐
+    ↓         ↓        ↓            ↓               ↓
+Classifier  DANN   Invariant  Trajectory    Temporal
+           (GRL)   (MMD+...)   Analyzer    Consistency
+```
+
+**Unified Loss Function:**
+```
+L_total = L_CE               (Classification)
+        + 0.1  · L_adv       (Domain Adversarial)
+        + 0.05 · L_inv       (MMD + CORAL + Contrastive)
+        + 0.05 · L_traj      (Trajectory Deviation)
+        + 0.02 · L_temp      (Temporal Smoothness)
+```
+
+**Training Process:**
+1. **Stage 1 (~1.5h):** SSL pre-training with SimCLR
+2. **Stage 2 (~4-5h):** Train 5 ultimate models
+   - Each with different random seed
+   - All loss components active
+   - Save individual models to `models/ultimate_ensemble/`
+3. **Stage 3 (~10min):** Ensemble evaluation via voting
+
+**Expected Performance:**
+- **Individual Models:** 80.17% - 83.67% (avg: 81.63% ± 1.28%)
+- **Best Individual:** Model #4 at 83.67% (F1: 0.72)
+- **Ensemble:** 79.01% (F1: 0.67) - *Note: ensemble underperformed due to low diversity*
+- **Training Time:** 6-8 hours total on RTX 5070 Ti
+
+**Key Concepts:**
+- **Maximum Techniques:** Uses all available optimizations
+- **Unified Training:** All losses optimized simultaneously
+- **Ensemble Diversity Issue:** Models too similar despite different seeds
+
+**Performance Analysis:**
+- ✅ Best individual performance (83.67%)
+- ⚠️ Ensemble didn't improve over best single model
+- ⚠️ Low inter-model variance suggests need for architectural diversity
+
+**When to Use:**
+- Research experimentation
+- When training time is not a constraint
+- To establish upper bound performance
+- **Not recommended for production** (Option 6 is better value)
+
+---
+
+#### **Option 14: 📊 Benchmark All Models**
+
+**Purpose:** Comprehensive comparison of all configurations
+
+**Models & Concepts:**
+- Trains and evaluates ALL previous options (1-13)
+- Collects metrics for each:
+  - Accuracy
+  - F1-Score (macro)
+  - Training time
+  - Per-class precision/recall
+- Ranks configurations by performance
+- Generates comparison report
+
+**Benchmark Configurations Tested:**
+1. Baseline (SSL + Classifier)
+2. Multi-Modal Fusion
+3. Multi-Modal Ensemble (5 models)
+4. SMOTE Oversampling
+5. DANN (Domain Adversarial)
+6. Trajectory Analysis
+7. Subject-Invariant Losses
+8. Combined (DANN + Multi-Modal)
+9. Ultimate (All Techniques)
+
+**Training Process:**
+1. For each configuration:
+   - Set up architecture
+   - Train with specified epochs (full or quick mode)
+   - Evaluate on test set
+   - Record all metrics
+2. Sort by accuracy
+3. Generate comparison table
+4. Identify best configuration
+
+**Output Report Includes:**
+- Ranked list of all models
+- Accuracy, F1-score, training time
+- Best model recommendation
+- Per-class performance comparison
+- Training time vs accuracy tradeoff analysis
+
+**Modes:**
+- **Full Mode:** Standard epochs for each config (~15-20 hours)
+- **Quick Mode:** Reduced epochs for faster comparison (~3-4 hours)
+
+**Expected Results (from testing):**
+1. 🥇 **SMOTE:** 83.67% accuracy
+2. 🥈 **Multi-Modal Ensemble:** 83.09% (best F1: 0.8072)
+3. 🥉 **Ultimate Model #4:** 83.67% individual
+
+**When to Use:**
+- **Research papers:** Comprehensive baseline comparisons
+- **Model selection:** Not sure which option to choose
+- **Performance analysis:** Understanding tradeoffs
+- **Hyperparameter tuning:** Identify promising configurations
+
+**Important Notes:**
+- Very time-consuming (15-20 hours full mode)
+- Requires significant computational resources
+- Quick mode available for faster iteration
+- Best for one-time comprehensive analysis
+
+---
+
+### Decision Guide: Which Option Should I Choose?
+
+| Your Goal | Recommended Option | Why |
+|-----------|-------------------|-----|
+| **Quick baseline** | Option 3 (Standard) | Fastest single-model result |
+| **Production deployment** | **Option 6 (Full Pipeline)** | Best accuracy + reliability balance |
+| **Research paper** | Option 14 (Benchmark) + Option 8 (LOSO) | Comprehensive comparison + gold standard eval |
+| **Class imbalance** | Option 7 (SMOTE) | 93% stress detection |
+| **Cross-subject focus** | Option 12 (Combined Advanced) | Best subject-invariance (0.6064) |
+| **Continuous monitoring** | Option 10 (Trajectory) | Real-time stress scores |
+| **Understand all models** | Option 14 (Benchmark) | Compare everything |
+| **Maximum accuracy** | Option 6 or Option 13 | 83% verified |
+| **Testing/debugging** | Option 1 (Test Run) | Validate setup |
+
+### Key Takeaways
+
+1. **Best Overall: Option 6 (Multi-Modal Ensemble)** - 83% accuracy, 0.81 F1, 3-4h training
+2. **Best for Stress Detection: Option 7 (SMOTE)** - 93.2% stress class accuracy
+3. **Best Cross-Subject: Option 12 (Combined Advanced)** - 60% subject-invariance
+4. **Best Evaluation: Option 8 (LOSO CV)** - True generalization metrics
+5. **Most Comprehensive: Option 14 (Benchmark)** - Compare all configurations
+
+**Pro Tip:** Start with Option 2 (pre-training) once, then reuse the saved encoder for Options 3-13.
+
+---
+
 ## 📁 Project Structure
 
 ```

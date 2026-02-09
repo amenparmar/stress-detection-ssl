@@ -1,0 +1,29 @@
+﻿    
+    elif args.mode == 'benchmark':
+        print("\n" + "="*80)
+        print(" BENCHMARK MODE: RUN ALL MODELS AND RANK BY ACCURACY")
+        print("="*80)
+        print("This will train and evaluate ALL model configurations:")
+        print("  1. Baseline (SSL + Classifier)")
+        print("  2. Multi-Modal Fusion")
+        print("  3. Multi-Modal Ensemble (5 models)")
+        print("  4. SMOTE Oversampling")
+        print("  5. DANN (Domain Adversarial)")
+        print("  6. Trajectory Analysis")
+        print("  7. Subject-Invariant Losses")
+        print("  8. Combined (DANN + Multi-Modal)")
+        print("  9. Ultimate (All Techniques)")
+        print("\nEstimated Time: 15-20 hours (full) or 3-4 hours (quick mode)")
+        print("="*80 + "\n")
+        
+        # Ask for quick mode
+        quick = input("Use QUICK mode (reduced epochs)? [y/N]: ").strip().lower() == 'y'
+        
+        from training.benchmark_all import benchmark_all_models
+        results = benchmark_all_models(train_loader, test_loader, device=device, quick_mode=quick)
+        
+        print("\n BENCHMARK COMPLETE! Results ranked above.")
+        print("Best model:", results[0][0], f"with {results[0][1]*100:.2f}% accuracy")
+
+if __name__ == "__main__":
+    main()

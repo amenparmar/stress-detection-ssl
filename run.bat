@@ -20,8 +20,9 @@ echo 10. Latent Trajectory Analysis (Continuous Monitoring)
 echo 11. Subject-Invariant Loss Training (MMD + CORAL + Contrastive)
 echo 12. COMBINED ADVANCED - MAXIMUM PERFORMANCE (DANN + Multi-Modal)
 echo 13. 🏆 ULTIMATE PERFORMANCE - ALL TECHNIQUES + ENSEMBLE (85-88%% Expected)
+echo 14. 📊 BENCHMARK ALL MODELS - Run and rank all configurations
 echo.
-set /p choice="Enter choice (1-13): "
+set /p choice="Enter choice (1-14): "
 
 if "%choice%"=="1" goto option1
 if "%choice%"=="2" goto option2
@@ -36,6 +37,7 @@ if "%choice%"=="10" goto option10
 if "%choice%"=="11" goto option11
 if "%choice%"=="12" goto option12
 if "%choice%"=="13" goto option13
+if "%choice%"=="14" goto option14
 goto invalid
 
 :option1
@@ -197,8 +199,33 @@ cd /d %PARENT_DIR%
 "%VENV_PYTHON%" -m stress_detection.main --mode ultimate --epochs 100 --batch_size 32
 goto end
 
+:option14
+echo.
+echo ========================================
+echo   📊 BENCHMARK ALL MODELS
+echo ========================================
+echo.
+echo This will run and rank ALL configurations:
+echo   1. Baseline (SSL + Classifier)
+echo   2. Multi-Modal Fusion
+echo   3. Multi-Modal Ensemble (5 models)
+echo   4. SMOTE Oversampling
+echo   5. DANN (Domain Adversarial)
+echo   6. Trajectory Analysis
+echo   7. Subject-Invariant Losses
+echo   8. Combined (DANN + Multi-Modal)
+echo   9. Ultimate (All Techniques)
+echo.
+echo Estimated Time: 15-20 hours (full) or 3-4 hours (quick mode)
+echo ========================================
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size 32
+goto end
+
 :invalid
-echo Invalid choice. Please run again and select 1-13.
+echo Invalid choice. Please run again and select 1-14.
 goto end
 
 :end

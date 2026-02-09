@@ -1,4 +1,4 @@
-
+﻿
 import argparse
 import os
 import torch
@@ -533,7 +533,7 @@ def main():
     
     elif args.mode == 'ultimate':
         print("\n" + "="*80)
-        print("🏆 ULTIMATE PERFORMANCE PIPELINE 🏆")
+        print("ðŸ† ULTIMATE PERFORMANCE PIPELINE ðŸ†")
         print("="*80)
         print("Stage 1: SSL Pre-training (500 epochs)")
         print("Stage 2: Ensemble of 5 Ultimate Models")
@@ -585,9 +585,9 @@ def main():
             
             os.makedirs('stress_detection/models', exist_ok=True)
             torch.save(encoder.state_dict(), pretrained_path)
-            print(f"\n✓ Pre-trained encoder saved to {pretrained_path}")
+            print(f"\nâœ“ Pre-trained encoder saved to {pretrained_path}")
         else:
-            print(f"\n✓ Using existing pre-trained encoder: {pretrained_path}")
+            print(f"\nâœ“ Using existing pre-trained encoder: {pretrained_path}")
         
         # ================================================
         # STAGE 2: TRAIN ENSEMBLE OF ULTIMATE MODELS
@@ -647,7 +647,7 @@ def main():
             ensemble_models.append((encoder, classifier, trajectory_analyzer))
             ensemble_accuracies.append(acc)
             
-            print(f"\n✓ Model {i+1}/5 Complete: {acc*100:.2f}% accuracy")
+            print(f"\nâœ“ Model {i+1}/5 Complete: {acc*100:.2f}% accuracy")
         
         # ensemble statistics
         print(f"\n{'='*80}")
@@ -704,16 +704,45 @@ def main():
         ensemble_f1 = f1_score(all_labels, all_preds, average='macro', zero_division=0)
         
         print(f"\n{'='*80}")
-        print("🏆 ULTIMATE PERFORMANCE RESULTS 🏆")
+        print("ðŸ† ULTIMATE PERFORMANCE RESULTS ðŸ†")
         print(f"{'='*80}")
         print(f"Ensemble Accuracy: {ensemble_acc*100:.2f}%")
         print(f"Ensemble F1 Score: {ensemble_f1:.4f}")
         print(f"Baseline (Original): 74.35%")
         print(f"Improvement: +{(ensemble_acc-0.7435)*100:.2f}%")
         print(f"{'='*80}")
-        print("\n✓ ULTIMATE PERFORMANCE PIPELINE COMPLETE!")
+        print("\nâœ“ ULTIMATE PERFORMANCE PIPELINE COMPLETE!")
         print("For true performance, run LOSO CV with this pipeline.")
         print(f"{'='*80}\n")
+    
+    elif args.mode == 'benchmark':
+        print("\n" + "="*80)
+        print(" BENCHMARK MODE: RUN ALL MODELS AND RANK BY ACCURACY")
+        print("="*80)
+        print("This will train and evaluate ALL model configurations:")
+        print("  1. Baseline (SSL + Classifier)")
+        print("  2. Multi-Modal Fusion")
+        print("  3. Multi-Modal Ensemble (5 models)")
+        print("  4. SMOTE Oversampling")
+        print("  5. DANN (Domain Adversarial)")
+        print("  6. Trajectory Analysis")
+        print("  7. Subject-Invariant Losses")
+        print("  8. Combined (DANN + Multi-Modal)")
+        print("  9. Ultimate (All Techniques)")
+        print("\nEstimated Time: 15-20 hours (full) or 3-4 hours (quick mode)")
+        print("="*80 + "\n")
+        
+        # Ask for quick mode
+        quick = input("Use QUICK mode (reduced epochs)? [y/N]: ").strip().lower() == 'y'
+        
+        from training.benchmark_all import benchmark_all_models
+        results = benchmark_all_models(train_loader, test_loader, device=device, quick_mode=quick)
+        
+        print("\n BENCHMARK COMPLETE! Results ranked above.")
+        print("Best model:", results[0][0], f"with {results[0][1]*100:.2f}% accuracy")
 
 if __name__ == "__main__":
     main()
+
+
+
