@@ -1,6 +1,6 @@
 ﻿
-import argparse
 import os
+import argparse
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -21,8 +21,13 @@ def main():
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='Batch size')
     args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    # GPU selection (CUDA_VISIBLE_DEVICES=1 is set in run.bat to use only NVIDIA GPU)
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")  # Will be NVIDIA GPU since Intel is hidden
+        print(f"✓ Using device: {torch.cuda.get_device_name(0)} (CUDA)")
+    else:
+        device = torch.device("cpu")
+        print(f"Using device: CPU")
 
     # Initialize Model
     encoder = Encoder(input_channels=3).to(device)
@@ -716,6 +721,22 @@ def main():
         print(f"{'='*80}\n")
     
     elif args.mode == 'benchmark':
+        # Create test_loader for evaluation
+        subjects = list(subject_data.keys())
+        split_idx = int(0.8 * len(subjects))
+        if split_idx == 0 and len(subjects) > 0:
+            split_idx = 1
+        train_subjects = subjects[:split_idx]
+        test_subjects = subjects[split_idx:]
+        if not test_subjects:
+            test_subjects = train_subjects
+        train_data_split = {k: subject_data[k] for k in train_subjects}
+        test_data_split = {k: subject_data[k] for k in test_subjects}
+        train_dataset_bench = WESADDataset(train_data_split, mode='supervised')
+        test_dataset_bench = WESADDataset(test_data_split, mode='supervised')
+        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False)
+        
         print("\n" + "="*80)
         print(" BENCHMARK MODE: RUN ALL MODELS AND RANK BY ACCURACY")
         print("="*80)

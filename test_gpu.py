@@ -1,20 +1,9 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import torch
 
-print("=" * 50)
-print("PyTorch GPU Test")
-print("=" * 50)
-print(f"PyTorch version: {torch.__version__}")
-print(f"CUDA available: {torch.cuda.is_available()}")
-
+print(f"CUDA Available: {torch.cuda.is_available()}")
+print(f"GPU Count: {torch.cuda.device_count()}")
 if torch.cuda.is_available():
-    print(f"CUDA version: {torch.version.cuda}")
-    print(f"GPU device: {torch.cuda.get_device_name(0)}")
-    print(f"GPU count: {torch.cuda.device_count()}")
-    
-    # Test tensor on GPU
-    x = torch.randn(3, 3).cuda()
-    print(f"Test tensor created on GPU: {x.device}")
-    print("✅ GPU is working!")
-else:
-    print("❌ GPU not available - running on CPU")
-print("=" * 50)
+    print(f"GPU 0: {torch.cuda.get_device_name(0)}")
+    print(f"Current Device: {torch.cuda.current_device()}")

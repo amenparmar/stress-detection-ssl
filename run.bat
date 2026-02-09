@@ -6,6 +6,10 @@ set SCRIPT_DIR=%~dp0
 set VENV_PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe
 set PARENT_DIR=%SCRIPT_DIR%..
 
+REM Force PyTorch to use only NVIDIA GPU (hide Intel integrated graphics)
+set CUDA_VISIBLE_DEVICES=1
+
+
 echo SELECT MODE:
 echo 1. Test Run (Mock Data)
 echo 2. Pre-train (Real WESAD Data - 500 epochs)
