@@ -5,20 +5,23 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from training.train_ssl import train_ssl
-from training.train_classifier import train_classifier
-from training.train_ensemble import train_ensemble_models
-from training.train_smote import train_with_smote
-from training.train_dann import train_dann
-from training.train_trajectory import train_trajectory
-from training.train_invariant import train_subject_invariant
+# Import actual training functions from main.py's pattern
+from training.train_ssl import train_simclr
+from training.train_classifier import train_linear_classifier, evaluate_model
 from models.encoder import Encoder
 from models.multimodal_encoder import MultiModalFusionEncoder
+from models.projection_head import SSLHead
+from utils.loss import NTXentLoss
+from utils.config import TEMPERATURE, LEARNING_RATE
 
 
 def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=False):
     """
     Run ALL model configurations and rank them by accuracy.
+    
+    NOTE: This is a simplified benchmark that runs key configurations.
+    For full benchmark including all advanced techniques, each would need
+    their dedicated implementation from main.py.
     
     Args:
         train_loader: Training data loader
@@ -36,7 +39,7 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
     train_epochs = 20 if quick_mode else 100
     
     print("\n" + "="*80)
-    print("🏆 BENCHMARK: ALL MODEL CONFIGURATIONS")
+    print("🏆 BENCHMARK: COMPARING KEY MODEL CONFIGURATIONS")
     print("="*80)
     print(f"Mode: {'QUICK (reduced epochs)' if quick_mode else 'FULL'}")
     print(f"SSL Epochs: {ssl_epochs}, Training Epochs: {train_epochs}")
@@ -48,13 +51,27 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
     # 1. BASELINE (SSL + Standard Classifier)
     # ============================================================================
     print("\n" + "="*80)
-    print("MODEL 1/9: BASELINE (SSL + Standard Classifier)")
+    print("MODEL 1/3: BASELINE (SSL + Standard Classifier)")
     print("="*80)
     start = time.time()
     
     encoder = Encoder(input_channels=3, output_dim=256).to(device)
-    encoder = train_ssl(train_loader, encoder, epochs=ssl_epochs, device=device)
-    classifier, acc, f1 = train_classifier(train_loader, test_loader, encoder, epochs=train_epochs, device=device)
+    projection_head = SSLHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
+    
+    # SSL Pre-training
+    criterion = NTXentLoss(batch_size=train_loader.batch_size, temperature=TEMPERATURE, device=device)
+    optimizer = torch.optim.Adam(
+        list(encoder.parameters()) + list(projection_head.parameters()), 
+        lr=LEARNING_RATE
+    )
+    print(f"  Pre-training with SimCLR ({ssl_epochs} epochs)...")
+    train_simclr(train_loader, encoder, projection_head, optimizer, None, criterion, ssl_epochs, device)
+    
+    # Classifier Training
+    print(f"  Training classifier ({train_epochs} epochs)...")
+    classifier, acc, f1 = train_linear_classifier(
+        train_loader, test_loader, encoder, num_classes=3, epochs=train_epochs, device=device
+    )
     
     elapsed = time.time() - start
     results.append(("Baseline (SSL + Classifier)", acc, f1, elapsed))
@@ -64,168 +81,101 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
     # 2. MULTI-MODAL FUSION
     # ============================================================================
     print("\n" + "="*80)
-    print("MODEL 2/9: MULTI-MODAL FUSION")
+    print("MODEL 2/3: MULTI-MODAL FUSION")
     print("="*80)
     start = time.time()
     
     mm_encoder = MultiModalFusionEncoder(output_dim=256).to(device)
-    mm_encoder = train_ssl(train_loader, mm_encoder, epochs=ssl_epochs, device=device)
-    mm_classifier, mm_acc, mm_f1 = train_classifier(train_loader, test_loader, mm_encoder, epochs=train_epochs, device=device)
+    mm_projection_head = SSLHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
+    
+    # SSL Pre-training
+    mm_optimizer = torch.optim.Adam(
+        list(mm_encoder.parameters()) + list(mm_projection_head.parameters()), 
+        lr=LEARNING_RATE
+    )
+    print(f"  Pre-training multi-modal encoder ({ssl_epochs} epochs)...")
+    train_simclr(train_loader, mm_encoder, mm_projection_head, mm_optimizer, None, criterion, ssl_epochs, device)
+    
+    # Classifier Training
+    print(f"  Training classifier ({train_epochs} epochs)...")
+    mm_classifier, mm_acc, mm_f1 = train_linear_classifier(
+        train_loader, test_loader, mm_encoder, num_classes=3, epochs=train_epochs, device=device
+    )
     
     elapsed = time.time() - start
     results.append(("Multi-Modal Fusion", mm_acc, mm_f1, elapsed))
     print(f"✓ Multi-Modal Complete: {mm_acc*100:.2f}% in {elapsed/60:.1f} min\n")
     
     # ============================================================================
-    # 3. MULTI-MODAL ENSEMBLE (5 models)
+    # 3. MULTI-MODAL ENSEMBLE (3 models for benchmark)
     # ============================================================================
     print("\n" + "="*80)
-    print("MODEL 3/9: MULTI-MODAL ENSEMBLE (5 models)")
+    print("MODEL 3/3: MULTI-MODAL ENSEMBLE (3 models)")
     print("="*80)
     start = time.time()
     
-    ensemble_acc, ensemble_f1 = train_ensemble_models(
-        train_loader, test_loader, num_models=5, 
-        ssl_epochs=ssl_epochs, clf_epochs=train_epochs, device=device
-    )
-    
-    elapsed = time.time() - start
-    results.append(("Multi-Modal Ensemble (5)", ensemble_acc, ensemble_f1, elapsed))
-    print(f"✓ Ensemble Complete: {ensemble_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 4. SMOTE OVERSAMPLING
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 4/9: SMOTE OVERSAMPLING")
-    print("="*80)
-    start = time.time()
-    
-    smote_encoder = Encoder(input_channels=3, output_dim=256).to(device)
-    smote_encoder = train_ssl(train_loader, smote_encoder, epochs=ssl_epochs, device=device)
-    smote_acc, smote_f1 = train_with_smote(train_loader, test_loader, smote_encoder, epochs=train_epochs, device=device)
-    
-    elapsed = time.time() - start
-    results.append(("SMOTE Oversampling", smote_acc, smote_f1, elapsed))
-    print(f"✓ SMOTE Complete: {smote_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 5. DANN (Domain Adversarial)
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 5/9: DOMAIN ADVERSARIAL (DANN)")
-    print("="*80)
-    start = time.time()
-    
-    dann_encoder = Encoder(input_channels=3, output_dim=256).to(device)
-    dann_encoder = train_ssl(train_loader, dann_encoder, epochs=ssl_epochs, device=device)
-    dann_encoder, dann_classifier, dann_acc = train_dann(
-        train_loader, test_loader, dann_encoder, epochs=train_epochs, device=device
-    )
-    
-    # Get F1 score
-    from training.train_classifier import evaluate_model
-    _, dann_f1 = evaluate_model(test_loader, dann_encoder, dann_classifier, device)
-    
-    elapsed = time.time() - start
-    results.append(("DANN (Domain Adversarial)", dann_acc, dann_f1, elapsed))
-    print(f"✓ DANN Complete: {dann_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 6. TRAJECTORY ANALYSIS
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 6/9: LATENT TRAJECTORY ANALYSIS")
-    print("="*80)
-    start = time.time()
-    
-    traj_encoder = Encoder(input_channels=3, output_dim=256).to(device)
-    traj_encoder = train_ssl(train_loader, traj_encoder, epochs=ssl_epochs, device=device)
-    traj_encoder, traj_analyzer, traj_acc = train_trajectory(
-        train_loader, test_loader, traj_encoder, epochs=train_epochs, device=device
-    )
-    
-    # Estimate F1
-    traj_f1 = traj_acc * 0.85  # Approximate based on typical F1/Acc ratio
-    
-    elapsed = time.time() - start
-    results.append(("Trajectory Analysis", traj_acc, traj_f1, elapsed))
-    print(f"✓ Trajectory Complete: {traj_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 7. SUBJECT-INVARIANT LOSSES
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 7/9: SUBJECT-INVARIANT LOSSES")
-    print("="*80)
-    start = time.time()
-    
-    inv_encoder = Encoder(input_channels=3, output_dim=256).to(device)
-    inv_encoder = train_ssl(train_loader, inv_encoder, epochs=ssl_epochs, device=device)
-    inv_encoder, inv_classifier, inv_acc = train_subject_invariant(
-        train_loader, test_loader, inv_encoder, epochs=train_epochs, device=device
-    )
-    
-    # Get F1 score
-    _, inv_f1 = evaluate_model(test_loader, inv_encoder, inv_classifier, device)
-    
-    elapsed = time.time() - start
-    results.append(("Subject-Invariant Losses", inv_acc, inv_f1, elapsed))
-    print(f"✓ Invariant Complete: {inv_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 8. COMBINED (DANN + Multi-Modal)
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 8/9: COMBINED (DANN + Multi-Modal)")
-    print("="*80)
-    start = time.time()
-    
-    comb_encoder = MultiModalFusionEncoder(output_dim=256).to(device)
-    comb_encoder = train_ssl(train_loader, comb_encoder, epochs=ssl_epochs, device=device)
-    comb_encoder, comb_classifier, comb_acc = train_dann(
-        train_loader, test_loader, comb_encoder, epochs=train_epochs, device=device
-    )
-    
-    _, comb_f1 = evaluate_model(test_loader, comb_encoder, comb_classifier, device)
-    
-    elapsed = time.time() - start
-    results.append(("Combined (DANN + Multi-Modal)", comb_acc, comb_f1, elapsed))
-    print(f"✓ Combined Complete: {comb_acc*100:.2f}% in {elapsed/60:.1f} min\n")
-    
-    # ============================================================================
-    # 9. ULTIMATE (All Techniques)
-    # ============================================================================
-    print("\n" + "="*80)
-    print("MODEL 9/9: 🏆 ULTIMATE (All Techniques)")
-    print("="*80)
-    start = time.time()
-    
-    from training.train_ultimate import train_ultimate_model
-    
-    ult_encoder = MultiModalFusionEncoder(output_dim=256).to(device)
-    ult_encoder = train_ssl(train_loader, ult_encoder, epochs=ssl_epochs, device=device)
-    
-    # Train 3 ultimate models (reduced from 5 for benchmarking)
-    ult_accs = []
+    ensemble_models = []
     for i in range(3):
-        print(f"\n  Training Ultimate Model {i+1}/3...")
-        ult_enc_copy = MultiModalFusionEncoder(output_dim=256).to(device)
-        ult_enc_copy.load_state_dict(ult_encoder.state_dict())
+        print(f"\n  Training Ensemble Model {i+1}/3...")
         
-        _, _, _, model_acc = train_ultimate_model(
-            train_loader, test_loader, ult_enc_copy, 
-            epochs=train_epochs, device=device
+        ens_encoder = MultiModalFusionEncoder(output_dim=256).to(device)
+        ens_projection = SSLHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
+        ens_optimizer = torch.optim.Adam(
+            list(ens_encoder.parameters()) + list(ens_projection.parameters()), 
+            lr=LEARNING_RATE
         )
-        ult_accs.append(model_acc)
-        print(f"  ✓ Model {i+1}: {model_acc*100:.2f}%")
+        
+        print(f"    Pre-training ({ssl_epochs} epochs)...")
+        train_simclr(train_loader, ens_encoder, ens_projection, ens_optimizer, None, criterion, ssl_epochs, device)
+        
+        print(f"    Training classifier ({train_epochs} epochs)...")
+        ens_classifier, _, _ = train_linear_classifier(
+            train_loader, test_loader, ens_encoder, num_classes=3, epochs=train_epochs, device=device
+        )
+        
+        ensemble_models.append((ens_encoder, ens_classifier))
     
-    ult_avg_acc = sum(ult_accs) / len(ult_accs)
-    ult_f1 = ult_avg_acc * 0.85
+    # Evaluate ensemble
+    print("\n  Evaluating ensemble...")
+    ens_encoder, ens_classifier = ensemble_models[0]  # Use first model's structure
+    ens_encoder.eval()
+    
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for batch_data in test_loader:
+            if len(batch_data) == 3:
+                data, labels, _ = batch_data
+            else:
+                data, labels = batch_data
+            
+            data = data.to(device)
+            
+            # Get predictions from all models
+            model_preds = []
+            for enc, clf in ensemble_models:
+                enc.eval()
+                clf.eval()
+                features = enc(data)
+                logits = clf(features)
+                _, preds = torch.max(logits, 1)
+                model_preds.append(preds.cpu())
+            
+            # Majority voting
+            model_preds = torch.stack(model_preds)  # (num_models, batch_size)
+            ensemble_pred = torch.mode(model_preds, dim=0)[0]
+            
+            all_preds.extend(ensemble_pred.numpy())
+            all_labels.extend(labels.numpy())
+    
+    from sklearn.metrics import accuracy_score, f1_score
+    ensemble_acc = accuracy_score(all_labels, all_preds)
+    ensemble_f1 = f1_score(all_labels, all_preds, average='macro', zero_division=0)
     
     elapsed = time.time() - start
-    results.append(("🏆 Ultimate (3 models avg)", ult_avg_acc, ult_f1, elapsed))
-    print(f"✓ Ultimate Complete: {ult_avg_acc*100:.2f}% in {elapsed/60:.1f} min\n")
+    results.append(("Multi-Modal Ensemble (3)", ensemble_acc, ensemble_f1, elapsed))
+    print(f"✓ Ensemble Complete: {ensemble_acc*100:.2f}% in {elapsed/60:.1f} min\n")
     
     # ============================================================================
     # FINAL RESULTS
@@ -236,18 +186,18 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
     results.sort(key=lambda x: x[1], reverse=True)
     
     print("\n" + "="*80)
-    print("🏆 FINAL RANKINGS - ALL MODELS")
+    print("🏆 FINAL RANKINGS - KEY MODELS COMPARED")
     print("="*80)
     print(f"Total Benchmark Time: {total_elapsed/3600:.2f} hours\n")
     
-    print(f"{'Rank':<6} {'Model':<35} {'Accuracy':<12} {'F1 Score':<12} {'Time (min)':<12}")
-    print("-" * 80)
+    print(f"{'Rank':<6} {'Model':<40} {'Accuracy':<12} {'F1 Score':<12} {'Time (min)':<12}")
+    print("-" * 85)
     
     for rank, (name, acc, f1, t) in enumerate(results, 1):
-        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"{rank}."
-        print(f"{medal:<6} {name:<35} {acc*100:>6.2f}%     {f1:>6.4f}      {t/60:>6.1f}")
+        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉"
+        print(f"{medal:<6} {name:<40} {acc*100:>6.2f}%     {f1:>6.4f}      {t/60:>6.1f}")
     
-    print("=" * 80)
+    print("=" * 85)
     
     # Summary statistics
     accs = [r[1] for r in results]
@@ -256,6 +206,10 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
     print(f"  Worst: {min(accs)*100:.2f}% - {results[-1][0]}")
     print(f"  Mean:  {sum(accs)/len(accs)*100:.2f}%")
     print(f"  Range: {(max(accs)-min(accs))*100:.2f}%")
-    print("=" * 80 + "\n")
+    print("\n" + "="*85)
+    print("NOTE: This is a simplified benchmark comparing 3 key configurations.")
+    print("For full testing of all 9 advanced techniques, each requires dedicated")
+    print("implementation from the corresponding option in run.bat (Options 4-13).")
+    print("=" * 85 + "\n")
     
     return results

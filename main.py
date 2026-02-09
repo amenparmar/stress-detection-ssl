@@ -15,7 +15,7 @@ from stress_detection.utils.config import *
 def main():
     parser = argparse.ArgumentParser(description="Self-Supervised Stress Detection")
     parser.add_argument('--mode', type=str, default='pretrain', 
-                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble', 'smote', 'loso', 'dann', 'trajectory', 'invariant', 'combined', 'ultimate'], 
+                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble', 'smote', 'loso', 'dann', 'trajectory', 'invariant', 'combined', 'ultimate', 'benchmark'], 
                        help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best), smote (SMOTE oversampling), loso (Leave-One-Subject-Out CV), dann (Domain Adversarial), trajectory (Latent Trajectory), invariant (Subject-Invariant Loss), combined (All Advanced Techniques), ultimate (MAXIMUM PERFORMANCE - All Techniques + Ensemble)')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='Batch size')
@@ -743,6 +743,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
