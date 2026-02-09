@@ -15,8 +15,8 @@ from stress_detection.utils.config import *
 def main():
     parser = argparse.ArgumentParser(description="Self-Supervised Stress Detection")
     parser.add_argument('--mode', type=str, default='pretrain', 
-                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble', 'smote', 'loso', 'dann', 'trajectory', 'invariant', 'combined', 'ultimate', 'benchmark'], 
-                       help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best), smote (SMOTE oversampling), loso (Leave-One-Subject-Out CV), dann (Domain Adversarial), trajectory (Latent Trajectory), invariant (Subject-Invariant Loss), combined (All Advanced Techniques), ultimate (MAXIMUM PERFORMANCE - All Techniques + Ensemble)')
+                       choices=['pretrain', 'evaluate', 'test_run', 'ensemble', 'multimodal', 'multimodal_ensemble', 'smote', 'loso', 'dann', 'trajectory', 'invariant', 'combined', 'ultimate', 'benchmark', 'advanced_benchmark'], 
+                       help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best), smote (SMOTE oversampling), loso (Leave-One-Subject-Out CV), dann (Domain Adversarial), trajectory (Latent Trajectory), invariant (Subject-Invariant Loss), combined (All Advanced Techniques), ultimate (MAXIMUM PERFORMANCE - All Techniques + Ensemble), benchmark (Basic Models), advanced_benchmark (Advanced Techniques)')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='Batch size')
     args = parser.parse_args()
@@ -759,12 +759,44 @@ def main():
         from training.benchmark_all import benchmark_all_models
         results = benchmark_all_models(train_loader, test_loader, device=device, quick_mode=quick)
         
-        print("\n BENCHMARK COMPLETE! Results ranked above.")
+        print("\n✓ BENCHMARK COMPLETE! Results ranked above.")
+        print("Best model:", results[0][0], f"with {results[0][1]*100:.2f}% accuracy")
+    
+    elif args.mode == 'advanced_benchmark':
+        # Create test_loader for evaluation
+        subjects = list(subject_data.keys())
+        split_idx = int(0.8 * len(subjects))
+        if split_idx == 0 and len(subjects) > 0:
+            split_idx = 1
+        train_subjects = subjects[:split_idx]
+        test_subjects = subjects[split_idx:]
+        if not test_subjects:
+            test_subjects = train_subjects
+        train_data_split = {k: subject_data[k] for k in train_subjects}
+        test_data_split = {k: subject_data[k] for k in test_subjects}
+        train_dataset_bench = WESADDataset(train_data_split, mode='supervised')
+        test_dataset_bench = WESADDataset(test_data_split, mode='supervised')
+        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False)
+        
+        print("\n" + "="*80)
+        print("🏆 ADVANCED BENCHMARK: ALL STATE-OF-THE-ART TECHNIQUES")
+        print("="*80)
+        print("This will train and evaluate advanced configurations:")
+        print("  1. SMOTE Oversampling")
+        print("  2. DANN (Domain Adversarial)")
+        print("  3. Subject-Invariant Loss")
+        print("  4. Ultimate Performance")
+        print("\nEstimated Time: 20-25 hours (full) or 4-6 hours (quick mode)")
+        print("="*80 + "\n")
+        
+        quick = input("Use QUICK mode (reduced epochs)? [y/N]: ").strip().lower() == 'y'
+        
+        from training.benchmark_advanced import benchmark_advanced_models
+        results = benchmark_advanced_models(train_loader, test_loader, device=device, quick_mode=quick)
+        
+        print("\n✓ ADVANCED BENCHMARK COMPLETE! Results ranked above.")
         print("Best model:", results[0][0], f"with {results[0][1]*100:.2f}% accuracy")
 
 if __name__ == "__main__":
     main()
-
-
-
-

@@ -25,8 +25,9 @@ echo 11. Subject-Invariant Loss Training (MMD + CORAL + Contrastive)
 echo 12. COMBINED ADVANCED - MAXIMUM PERFORMANCE (DANN + Multi-Modal)
 echo 13. 🏆 ULTIMATE PERFORMANCE - ALL TECHNIQUES + ENSEMBLE (85-88%% Expected)
 echo 14. 📊 BENCHMARK ALL MODELS - Run and rank all configurations
+echo 15. 🚀 ADVANCED BENCHMARK - Test SMOTE, DANN, Invariant, Ultimate
 echo.
-set /p choice="Enter choice (1-14): "
+set /p choice="Enter choice (1-15): "
 
 if "%choice%"=="1" goto option1
 if "%choice%"=="2" goto option2
@@ -42,6 +43,7 @@ if "%choice%"=="11" goto option11
 if "%choice%"=="12" goto option12
 if "%choice%"=="13" goto option13
 if "%choice%"=="14" goto option14
+if "%choice%"=="15" goto option15
 goto invalid
 
 :option1
@@ -228,8 +230,28 @@ cd /d %PARENT_DIR%
 "%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size 32
 goto end
 
+:option15
+echo.
+echo ========================================
+echo   🚀 ADVANCED BENCHMARK
+echo ========================================
+echo.
+echo This will run and rank advanced techniques:
+echo   1. SMOTE Oversampling
+echo   2. DANN (Domain Adversarial)
+echo   3. Subject-Invariant Loss
+echo   4. Ultimate Performance
+echo.
+echo Estimated Time: 20-25 hours (full) or 4-6 hours (quick mode)
+echo ========================================
+echo.
+pause
+cd /d %PARENT_DIR%
+"%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size 32
+goto end
+
 :invalid
-echo Invalid choice. Please run again and select 1-14.
+echo Invalid choice. Please run again and select 1-15.
 goto end
 
 :end

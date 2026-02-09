@@ -35,7 +35,19 @@ def train_classifier_simple(train_loader, test_loader, encoder, num_classes=3, e
             else:
                 data, labels = batch_data
             
-            # Remap labels from WESAD (1,2,3) to PyTorch (0,1,2)
+            # Filter and remap labels from WESAD to PyTorch format
+            # WESAD: 1=baseline, 2=stress, 3=amusement, 4=meditation
+            # PyTorch needs: 0, 1, 2 (we only use 3 classes)
+            # Remove any samples with label 4 (meditation) or invalid labels
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+            
+            if len(labels) == 0:  # Skip if no valid labels in batch
+                continue
+            
+            # Remap labels: 1→0, 2→1, 3→2
             labels = labels - 1
             
             data, labels = data.to(device), labels.to(device)
@@ -61,7 +73,16 @@ def train_classifier_simple(train_loader, test_loader, encoder, num_classes=3, e
             else:
                 data, labels = batch_data
             
-            # Remap labels from WESAD (1,2,3) to PyTorch (0,1,2)
+            # Filter and remap labels (same as training)
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+            
+            if len(labels) == 0:
+                continue
+            
+            # Remap labels: 1→0, 2→1, 3→2
             labels = labels - 1
             
             data = data.to(device)
@@ -207,7 +228,16 @@ def benchmark_all_models(train_loader, test_loader, device='cpu', quick_mode=Fal
             else:
                 data, labels = batch_data
             
-            # Remap labels from WESAD (1,2,3) to PyTorch (0,1,2)
+            # Filter and remap labels (same as training)
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+            
+            if len(labels) == 0:
+                continue
+            
+            # Remap labels: 1→0, 2→1, 3→2
             labels = labels - 1
             
             data = data.to(device)

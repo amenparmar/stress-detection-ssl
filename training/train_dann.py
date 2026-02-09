@@ -93,6 +93,18 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
                 data, stress_labels = batch_data
                 subject_ids = torch.zeros(data.size(0), dtype=torch.long)
             
+            # Filter and remap labels: remove label 4 (meditation), remap 1,2,3 to 0,1,2
+            valid_mask = (stress_labels >= 1) & (stress_labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                stress_labels = stress_labels[valid_mask]
+                subject_ids = subject_ids[valid_mask]
+            
+            if len(stress_labels) == 0:  # Skip batch if no valid labels
+                continue
+            
+            stress_labels = stress_labels - 1  # Remap: 1→0, 2→1, 3→2
+            
             data = data.to(device)
             stress_labels = stress_labels.to(device)
             subject_ids = subject_ids.to(device)
