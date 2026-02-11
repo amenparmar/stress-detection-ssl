@@ -32,7 +32,11 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     all_labels = []
     
     with torch.no_grad():
-        for data, target in tqdm(train_loader, desc="Feature Extraction"):
+        for batch_data in tqdm(train_loader, desc="Feature Extraction"):
+            if len(batch_data) == 3:
+                data, target, _ = batch_data
+            else:
+                data, target = batch_data
             data = data.to(device)
             features = encoder(data)
             all_features.append(features.cpu().numpy())
@@ -122,7 +126,11 @@ def evaluate_with_details(loader, encoder, classifier, device):
     all_targets = []
     
     with torch.no_grad():
-        for data, target in loader:
+        for batch_data in loader:
+            if len(batch_data) == 3:
+                data, target, _ = batch_data
+            else:
+                data, target = batch_data
             data = data.to(device)
             target = target.squeeze()
             features = encoder(data)
