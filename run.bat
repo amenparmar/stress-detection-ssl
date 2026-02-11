@@ -7,7 +7,8 @@ set VENV_PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe
 set PARENT_DIR=%SCRIPT_DIR%..
 
 REM Force PyTorch to use only NVIDIA GPU (hide Intel integrated graphics)
-set CUDA_VISIBLE_DEVICES=1
+REM Force PyTorch to use only NVIDIA GPU (hide Intel integrated graphics)
+REM set CUDA_VISIBLE_DEVICES=0
 
 
 echo SELECT MODE:

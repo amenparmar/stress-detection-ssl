@@ -90,6 +90,18 @@ def train_classifier_with_invariant_loss(train_loader, test_loader, encoder, num
                 data, labels = batch_data
                 subject_ids = torch.arange(data.size(0))  # Dummy subject IDs
             
+            # Filter and remap labels: remove label 4 (meditation), remap 1,2,3 to 0,1,2
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+                subject_ids = subject_ids[valid_mask]
+            
+            if len(labels) == 0:  # Skip batch if no valid labels
+                continue
+            
+            labels = labels - 1  # Remap: 1→0, 2→1, 3→2
+            
             data = data.to(device)
             labels = labels.to(device)
             subject_ids = subject_ids.to(device)
@@ -198,6 +210,17 @@ def evaluate_classifier(test_loader, encoder, classifier, device):
                 data, labels, _ = batch_data
             else:
                 data, labels = batch_data
+            
+            # Filter and remap labels
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+            
+            if len(labels) == 0:
+                continue
+            
+            labels = labels - 1  # Remap: 1→0, 2→1, 3→2
             
             data = data.to(device)
             labels = labels.to(device)

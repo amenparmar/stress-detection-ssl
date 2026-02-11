@@ -128,13 +128,25 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
         for batch_idx, batch_data in enumerate(progress_bar):
             # Unpack batch
             if len(batch_data) == 3:
-                data, labels, subject_ids = batch_data
+                data, stress_labels, subject_ids = batch_data
             else:
-                data, labels = batch_data
+                data, stress_labels = batch_data
                 subject_ids = torch.zeros(data.size(0), dtype=torch.long)
             
+            # Filter and remap labels: remove label 4 (meditation), remap 1,2,3 to 0,1,2
+            valid_mask = (stress_labels >= 1) & (stress_labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                stress_labels = stress_labels[valid_mask]
+                subject_ids = subject_ids[valid_mask]
+            
+            if len(stress_labels) == 0:  # Skip batch if no valid labels
+                continue
+            
+            stress_labels = stress_labels - 1  # Remap: 1→0, 2→1, 3→2
+            
             data = data.to(device)
-            labels = labels.to(device)
+            stress_labels = stress_labels.to(device)
             subject_ids = subject_ids.to(device)
             
             # Zero gradients
@@ -149,10 +161,10 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             features = encoder(data)  # (Batch, 256)
             
             # ================================================
-            # Loss 1: Classification
+            # 1. Stress Classification Loss
             # ================================================
-            logits = classifier(features)
-            class_loss = class_criterion(logits, labels)
+            stress_logits = classifier(features)
+            stress_loss = class_criterion(stress_logits, stress_labels)
             
             # ================================================
             # Loss 2: Domain Adversarial (DANN)
@@ -165,7 +177,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             # Loss 3: Subject-Invariant (MMD + CORAL + Contrastive)
             # ================================================
             inv_total, mmd_loss, coral_loss, contrastive_loss = invariant_loss_fn(
-                features, labels, subject_ids
+                features, stress_labels, subject_ids
             )
             
             # ================================================
@@ -174,7 +186,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             traj_logits, deviations, continuous_scores = trajectory_analyzer(
                 features, subject_ids, apply_smoothing=False
             )
-            traj_loss = class_criterion(traj_logits, labels)
+            traj_loss = class_criterion(traj_logits, stress_labels)
             
             # ================================================
             # Loss 5: Temporal Consistency
@@ -192,7 +204,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             # Combined Loss
             # ================================================
             combined_loss = (
-                class_loss +
+                stress_loss +
                 alpha * adv_loss +
                 beta * inv_total +
                 gamma * traj_loss +
@@ -212,7 +224,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             # Metrics
             # ================================================
             total_loss += combined_loss.item()
-            loss_breakdown['class'] += class_loss.item()
+            loss_breakdown['class'] += stress_loss.item()
             loss_breakdown['adversarial'] += adv_loss.item()
             loss_breakdown['mmd'] += mmd_loss.item()
             loss_breakdown['coral'] += coral_loss.item()
@@ -220,14 +232,14 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             loss_breakdown['trajectory'] += traj_loss.item()
             loss_breakdown['temporal'] += temp_loss.item()
             
-            _, predicted = torch.max(logits, 1)
-            correct += (predicted == labels).sum().item()
-            total_samples += labels.size(0)
+            _, predicted = torch.max(stress_logits, 1)
+            correct += (predicted == stress_labels).sum().item()
+            total_samples += stress_labels.size(0)
             
             # Update progress bar
             progress_bar.set_postfix({
                 'loss': combined_loss.item(),
-                'class': class_loss.item(),
+                'class': stress_loss.item(),
                 'adv': adv_loss.item(),
                 'inv': inv_total.item(),
                 'traj': traj_loss.item()
@@ -280,7 +292,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
     print(f"Best Test Accuracy: {best_test_acc*100:.2f}%")
     print(f"{'='*80}\n")
     
-    return encoder, classifier, trajectory_analyzer, best_test_acc
+    return encoder, classifier, domain_classifier, trajectory_analyzer, best_test_acc
 
 
 def evaluate_ultimate_model(test_loader, encoder, classifier, domain_classifier,
@@ -303,6 +315,18 @@ def evaluate_ultimate_model(test_loader, encoder, classifier, domain_classifier,
             else:
                 data, labels = batch_data
                 subject_ids = torch.zeros(data.size(0), dtype=torch.long)
+            
+            # Filter and remap labels
+            valid_mask = (labels >= 1) & (labels <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                labels = labels[valid_mask]
+                subject_ids = subject_ids[valid_mask]
+            
+            if len(labels) == 0:
+                continue
+            
+            labels = labels - 1  # Remap: 1→0, 2→1, 3→2
             
             data = data.to(device)
             labels = labels.to(device)
