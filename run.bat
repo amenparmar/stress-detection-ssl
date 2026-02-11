@@ -28,7 +28,11 @@ echo 13. 🏆 ULTIMATE PERFORMANCE - ALL TECHNIQUES + ENSEMBLE (85-88%% Expected
 echo 14. 📊 BENCHMARK ALL MODELS - Run and rank all configurations
 echo 15. 🚀 ADVANCED BENCHMARK - Test SMOTE, DANN, Invariant, Ultimate
 echo.
-set /p choice="Enter choice (1-15): "
+echo 15. 🚀 ADVANCED BENCHMARK - Test SMOTE, DANN, Invariant, Ultimate
+echo.
+echo 99. RESET CACHE & CHECKPOINTS (Clear pycache/models)
+echo.
+set /p choice="Enter choice (1-15 or 99): "
 
 if "%choice%"=="1" goto option1
 if "%choice%"=="2" goto option2
@@ -45,6 +49,8 @@ if "%choice%"=="12" goto option12
 if "%choice%"=="13" goto option13
 if "%choice%"=="14" goto option14
 if "%choice%"=="15" goto option15
+if "%choice%"=="15" goto option15
+if "%choice%"=="99" goto option99
 goto invalid
 
 :option1
@@ -249,6 +255,61 @@ echo.
 pause
 cd /d %PARENT_DIR%
 "%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size 32
+goto end
+
+:option99
+cls
+echo ========================================
+echo   RESET CACHE & CHECKPOINTS
+echo ========================================
+echo.
+echo This utility helps solve "weird" errors by clearing old data.
+echo.
+echo 1. Clear Python Cache (__pycache__) - Safe, recommended
+echo 2. Clear Saved Models (checkpoints) - DESTRUCTIVE (You lose training!)
+echo 3. Clear BOTH
+echo 4. Cancel
+echo.
+set /p clean_choice="Select (1-4): "
+
+if "%clean_choice%"=="1" goto clean_pycache
+if "%clean_choice%"=="2" goto clean_models
+if "%clean_choice%"=="3" goto clean_both
+goto end
+
+:clean_pycache
+echo.
+echo Cleaning stress_detection\__pycache__...
+if exist "stress_detection\__pycache__" rd /s /q "stress_detection\__pycache__"
+for /d /r stress_detection %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
+echo Done.
+pause
+goto end
+
+:clean_models
+echo.
+echo WARNING: This will delete ALL files in stress_detection\models\
+set /p confirm="Are you sure? (y/N): "
+if /i not "%confirm%"=="y" goto end
+echo Deleting models...
+if exist "stress_detection\models" del /q "stress_detection\models\*"
+echo Done.
+pause
+goto end
+
+:clean_both
+echo.
+echo Cleaning stress_detection\__pycache__...
+if exist "stress_detection\__pycache__" rd /s /q "stress_detection\__pycache__"
+for /d /r stress_detection %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
+echo.
+echo WARNING: This will delete ALL files in stress_detection\models\
+set /p confirm="Are you sure? (y/N): "
+if /i not "%confirm%"=="y" goto end
+echo Deleting models...
+if exist "stress_detection\models" del /q "stress_detection\models\*"
+echo Done.
+pause
 goto end
 
 :invalid

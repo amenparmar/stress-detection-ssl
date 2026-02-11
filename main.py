@@ -643,7 +643,7 @@ def main():
             # We'll train from scratch with ultimate training
             
             # Train with all techniques
-            encoder, classifier, trajectory_analyzer, acc = train_ultimate_model(
+            encoder, classifier, _, trajectory_analyzer, acc = train_ultimate_model(
                 train_loader, test_loader, encoder,
                 num_classes=3, num_subjects=num_subjects,
                 epochs=args.epochs, device=device

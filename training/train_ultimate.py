@@ -86,7 +86,43 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
     best_test_acc = 0.0
     prev_features = None
     
-    for epoch in range(epochs):
+    # Checkpoint Logic
+    start_epoch = 0
+    checkpoint_path = 'stress_detection/models/ultimate_checkpoint.pth'
+    
+    if os.path.exists(checkpoint_path):
+        print(f"Found checkpoint at {checkpoint_path}. Resuming...")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        start_epoch = checkpoint['epoch'] + 1
+        best_test_acc = checkpoint['best_test_acc']
+        encoder.load_state_dict(checkpoint['encoder'])
+        classifier.load_state_dict(checkpoint['classifier'])
+        domain_classifier.load_state_dict(checkpoint['domain_classifier'])
+        trajectory_analyzer.load_state_dict(checkpoint['trajectory_analyzer'])
+        encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+        classifier_optimizer.load_state_dict(checkpoint['classifier_optimizer'])
+        domain_optimizer.load_state_dict(checkpoint['domain_optimizer'])
+        trajectory_optimizer.load_state_dict(checkpoint['trajectory_optimizer'])
+        print(f"Resuming from epoch {start_epoch+1}")
+    
+    elif os.path.exists('stress_detection/models/encoder_ultimate.pth'):
+        print(f"Fallback: Resuming from best weights at stress_detection/models/encoder_ultimate.pth")
+        print("Note: Starting at epoch 0, re-initializing optimizers and domain classifier.")
+        try:
+            encoder.load_state_dict(torch.load('stress_detection/models/encoder_ultimate.pth', map_location=device))
+            
+            if os.path.exists('stress_detection/models/classifier_ultimate.pth'):
+                classifier.load_state_dict(torch.load('stress_detection/models/classifier_ultimate.pth', map_location=device))
+            
+            if os.path.exists('stress_detection/models/trajectory_ultimate.pth'):
+                trajectory_analyzer.load_state_dict(torch.load('stress_detection/models/trajectory_ultimate.pth', map_location=device))
+                
+            print("Weights loaded successfully.")
+        except RuntimeError as e:
+            print(f"Warning: Could not load weights due to architecture mismatch: {e}")
+            print("Starting training from scratch.")
+
+    for epoch in range(start_epoch, epochs):
         # ================================================
         # STEP 1: Update GRL lambda (0 → 1 over training)
         # ================================================
@@ -96,7 +132,7 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
         # ================================================
         # STEP 2: Extract baselines for trajectory (every 10 epochs)
         # ================================================
-        if epoch % 10 == 0:
+        if epoch % 10 == 0 or epoch == start_epoch:
             print(f"  [Epoch {epoch+1}] Extracting subject baselines for trajectory analysis...")
             baselines = extract_subject_baselines(encoder, train_loader, device)
             trajectory_analyzer.subject_baselines = baselines
@@ -284,6 +320,22 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
                 torch.save(classifier.state_dict(), 'stress_detection/models/classifier_ultimate.pth')
                 torch.save(trajectory_analyzer.state_dict(), 'stress_detection/models/trajectory_ultimate.pth')
                 print(f"  ✓ New best model saved! Accuracy: {best_test_acc*100:.2f}%")
+        
+        # Save Checkpoint (Every Epoch)
+        checkpoint = {
+            'epoch': epoch,
+            'best_test_acc': best_test_acc,
+            'encoder': encoder.state_dict(),
+            'classifier': classifier.state_dict(),
+            'domain_classifier': domain_classifier.state_dict(),
+            'trajectory_analyzer': trajectory_analyzer.state_dict(),
+            'encoder_optimizer': encoder_optimizer.state_dict(),
+            'classifier_optimizer': classifier_optimizer.state_dict(),
+            'domain_optimizer': domain_optimizer.state_dict(),
+            'trajectory_optimizer': trajectory_optimizer.state_dict(),
+        }
+        torch.save(checkpoint, checkpoint_path)
+
         
         print("="*80)
     
