@@ -11,7 +11,7 @@ WINDOW_SIZE = 60  # seconds - Optimal for dataset size and accuracy balance
 WINDOW_SHIFT = 0.25 # seconds (overlap)
 
 # Training Hyperparameters
-BATCH_SIZE = 32  # Reduced from 128 for better convergence with limited data
+BATCH_SIZE = 1000  # Increased to utilize GPU memory
 LEARNING_RATE = 3e-4
 EPOCHS = 500  # Increased from 300 for even better SSL convergence
 TEMPERATURE = 0.1 # For NT-Xent loss
