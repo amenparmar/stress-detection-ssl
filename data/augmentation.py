@@ -4,88 +4,55 @@ import numpy as np
 
 class SignalAugmentation:
     """
-    Data augmentation for multimodal physiological signals.
-    Applies transformations suitable for EDA, TEMP, and BVP signals.
+    Vectorized data augmentation for multimodal physiological signals.
+    Accepts batches of shape (Batch, Channels, Time).
     """
     
     def __init__(self, noise_factor=0.03, scale_range=(0.9, 1.1), 
-                 time_warp_sigma=0.2, magnitude_warp_sigma=0.2):
-        """
-        Args:
-            noise_factor: Standard deviation of Gaussian noise
-            scale_range: Range for random scaling (min, max)
-            time_warp_sigma: Sigma for time warping
-            magnitude_warp_sigma: Sigma for magnitude warping
-        """
+                 magnitude_warp_sigma=0.2):
         self.noise_factor = noise_factor
         self.scale_range = scale_range
-        self.time_warp_sigma = time_warp_sigma
         self.magnitude_warp_sigma = magnitude_warp_sigma
     
-    def add_noise(self, signal):
-        """Add Gaussian noise to signal."""
-        noise = torch.randn_like(signal, device=signal.device) * self.noise_factor
-        return signal + noise
+    def add_noise(self, x):
+        """Add Gaussian noise to a batch of signals."""
+        return x + torch.randn_like(x) * self.noise_factor
     
-    def scale(self, signal):
-        """Random scaling of signal magnitude."""
-        scale_factor = torch.FloatTensor(1).uniform_(*self.scale_range).to(signal.device)
-        return signal * scale_factor
+    def scale(self, x):
+        """Random scaling of signal magnitude for each sample in batch."""
+        batch_size = x.shape[0]
+        scales = torch.empty(batch_size, 1, 1, device=x.device).uniform_(*self.scale_range)
+        return x * scales
     
-    def time_warp(self, signal):
-        """
-        Time warping using interpolation.
-        Slightly stretches or compresses the signal in time.
-        """
-        device = signal.device
-        length = signal.shape[-1]
-        # Create warped time indices
-        orig_steps = torch.arange(length, dtype=torch.float32, device=device)
-        warp = torch.randn(length, device=device) * self.time_warp_sigma
-        warped_steps = orig_steps + warp
-        warped_steps = torch.clamp(warped_steps, 0, length - 1)
+    def magnitude_warp(self, x):
+        """Apply smooth magnitude warping to a batch of signals."""
+        batch_size, channels, length = x.shape
+        device = x.device
         
-        # Interpolate
-        warped_signal = torch.nn.functional.interpolate(
-            signal.unsqueeze(0), 
-            size=length, 
-            mode='linear', 
-            align_corners=False
-        ).squeeze(0)
-        
-        return warped_signal
-    
-    def magnitude_warp(self, signal):
-        """
-        Apply smooth magnitude warping.
-        Multiplies signal by a smooth random curve.
-        """
-        device = signal.device  # Get device from input signal
-        length = signal.shape[-1]
-        # Create smooth random curve
+        # Create smooth random curves for each sample and channel
         num_knots = max(4, length // 20)
-        knots = torch.randn(num_knots, device=device) * self.magnitude_warp_sigma + 1.0
+        knots = torch.randn(batch_size, channels, num_knots, device=device) * self.magnitude_warp_sigma + 1.0
         
         # Interpolate to full length
-        warp_curve = torch.nn.functional.interpolate(
-            knots.unsqueeze(0).unsqueeze(0),
+        warp_curves = torch.nn.functional.interpolate(
+            knots,
             size=length,
             mode='linear',
             align_corners=False
-        ).squeeze()
+        )
         
-        return signal * warp_curve
+        return x * warp_curves
     
-    def __call__(self, signal, num_augmentations=2):
+    def __call__(self, x, num_augmentations=2):
         """
-        Apply random combination of augmentations.
+        Apply random combination of augmentations to a batch.
         
         Args:
-            signal: Input signal tensor (Channels, Time)
+            x: Input signal batch (Batch, Channels, Time)
             num_augmentations: Number of augmentation types to apply
             
         Returns:
-            Augmented signal
+            Augmented signal batch
         """
         augmentations = [
             self.add_noise,
@@ -93,11 +60,12 @@ class SignalAugmentation:
             self.magnitude_warp,
         ]
         
-        # Randomly select augmentations
-        selected = np.random.choice(augmentations, num_augmentations, replace=False)
+        # Shuffle augmentations and apply first N
+        # (Using a simpler approach for vectorization: apply with fixed probability or fixed count)
+        indices = torch.randperm(len(augmentations))[:num_augmentations]
         
-        augmented = signal.clone()
-        for aug_fn in selected:
-            augmented = aug_fn(augmented)
+        augmented = x.clone()
+        for idx in indices:
+            augmented = augmentations[idx](augmented)
         
         return augmented

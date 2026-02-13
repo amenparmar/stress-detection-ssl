@@ -68,6 +68,9 @@ def train_classifier_with_invariant_loss(train_loader, test_loader, encoder, num
     print(f"Epochs: {epochs}, Learning Rate: {lr}")
     print("="*80 + "\n")
     
+    # Initialize AMP scaler
+    scaler = torch.cuda.amp.GradScaler()
+    
     for epoch in range(epochs):
         total_loss = 0.0
         total_class_loss = 0.0
@@ -88,7 +91,7 @@ def train_classifier_with_invariant_loss(train_loader, test_loader, encoder, num
                 data, labels, subject_ids = batch_data
             else:
                 data, labels = batch_data
-                subject_ids = torch.arange(data.size(0))  # Dummy subject IDs
+                subject_ids = torch.arange(data.size(0))
             
             # Filter and remap labels: remove label 4 (meditation), remap 1,2,3 to 0,1,2
             valid_mask = (labels >= 1) & (labels <= 3)
@@ -97,36 +100,40 @@ def train_classifier_with_invariant_loss(train_loader, test_loader, encoder, num
                 labels = labels[valid_mask]
                 subject_ids = subject_ids[valid_mask]
             
-            if len(labels) == 0:  # Skip batch if no valid labels
+            if len(labels) == 0:
                 continue
             
-            labels = labels - 1  # Remap: 1→0, 2→1, 3→2
+            labels = labels - 1
             
-            data = data.to(device)
-            labels = labels.to(device)
-            subject_ids = subject_ids.to(device)
+            data = data.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+            subject_ids = subject_ids.to(device, non_blocking=True)
             
-            # Forward pass
-            features = encoder(data)
-            logits = classifier(features)
+            encoder_optimizer.zero_grad(set_to_none=True)
+            classifier_optimizer.zero_grad(set_to_none=True)
             
-            # Classification loss
-            class_loss = class_criterion(logits, labels)
+            # AMP: Automatic Mixed Precision
+            with torch.cuda.amp.autocast():
+                # Forward pass
+                features = encoder(data)
+                logits = classifier(features)
+                
+                # Classification loss
+                class_loss = class_criterion(logits, labels)
+                
+                # Subject-invariant losses
+                inv_loss, mmd_loss, coral_loss, contrastive_loss = invariant_loss_fn(
+                    features, labels, subject_ids
+                )
+                
+                # Total loss
+                loss = class_loss + inv_loss
             
-            # Subject-invariant losses
-            inv_loss, mmd_loss, coral_loss, contrastive_loss = invariant_loss_fn(
-                features, labels, subject_ids
-            )
-            
-            # Total loss
-            loss = class_loss + inv_loss
-            
-            # Backward pass
-            encoder_optimizer.zero_grad()
-            classifier_optimizer.zero_grad()
-            loss.backward()
-            encoder_optimizer.step()
-            classifier_optimizer.step()
+            # Backward pass with Scaling
+            scaler.scale(loss).backward()
+            scaler.step(encoder_optimizer)
+            scaler.step(classifier_optimizer)
+            scaler.update()
             
             # Metrics
             total_loss += loss.item()
@@ -141,11 +148,9 @@ def train_classifier_with_invariant_loss(train_loader, test_loader, encoder, num
             
             # Update progress bar
             progress_bar.set_postfix({
-                'loss': loss.item(),
-                'class': class_loss.item(),
-                'mmd': mmd_loss.item(),
-                'coral': coral_loss.item(),
-                'contrast': contrastive_loss.item()
+                'loss': f"{loss.item():.4f}",
+                'class': f"{class_loss.item():.4f}",
+                'inv': f"{inv_loss.item():.4f}"
             })
         
         # Epoch statistics

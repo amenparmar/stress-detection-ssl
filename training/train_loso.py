@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from tqdm import tqdm
 
 
-def leave_one_subject_out_cv(subject_data, encoder_class, num_classes=3, epochs=100, device='cpu'):
+def leave_one_subject_out_cv(subject_data, encoder_class, num_classes=3, epochs=100, batch_size=1000, device='cpu'):
     """
     Perform leave-one-subject-out cross-validation.
     
@@ -58,8 +58,8 @@ def leave_one_subject_out_cv(subject_data, encoder_class, num_classes=3, epochs=
         train_dataset = WESADDataset(train_subjects, mode='classifier')
         test_dataset = WESADDataset(test_subjects, mode='classifier')
         
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
         

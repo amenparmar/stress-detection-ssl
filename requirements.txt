@@ -5,3 +5,4 @@ scikit-learn
 scipy
 matplotlib
 tqdm
+imbalanced-learn

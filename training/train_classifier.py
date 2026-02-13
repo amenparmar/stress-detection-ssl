@@ -98,30 +98,40 @@ def train_linear_classifier(train_loader, test_loader, encoder, num_classes, epo
     
     best_acc = 0.0
     
+    # Initialize AMP scaler
+    scaler = torch.cuda.amp.GradScaler()
+    
     for epoch in range(epochs):
         # Set modes
         if finetune_encoder:
-            encoder.train()  # Allow gradient updates
+            encoder.train()
         classifier.train()
         total_loss = 0
         
-        for data, target in tqdm(train_loader, desc=f"Classifier Epoch {epoch+1}"):
-            data, target = data.to(device), target.squeeze().to(device)
+        progress_bar = tqdm(train_loader, desc=f"Classifier Epoch {epoch+1}")
+        for data, target in progress_bar:
+            data, target = data.to(device, non_blocking=True), target.squeeze().to(device, non_blocking=True)
             
-            # Forward pass (with gradients for encoder if fine-tuning)
-            if finetune_encoder:
-                features = encoder(data)  # Gradients enabled
-            else:
-                with torch.no_grad():
-                    features = encoder(data)  # No gradients
-                
-            output = classifier(features)
-            loss = criterion(output, target)
+            optimizer.zero_grad(set_to_none=True)
             
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            # AMP: Automatic Mixed Precision
+            with torch.cuda.amp.autocast():
+                if finetune_encoder:
+                    features = encoder(data)
+                else:
+                    with torch.no_grad():
+                        features = encoder(data)
+                    
+                output = classifier(features)
+                loss = criterion(output, target)
+            
+            # Scale loss and step optimizer
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            
             total_loss += loss.item()
+            progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
             
         # Evaluation
         acc, f1 = evaluate(test_loader, encoder, classifier, device)
@@ -130,7 +140,6 @@ def train_linear_classifier(train_loader, test_loader, encoder, num_classes, epo
         
         if acc > best_acc:
             best_acc = acc
-            # Save classifier
             torch.save(classifier.state_dict(), 'stress_detection/models/classifier_best.pth')
             print(f"  ✓ New best accuracy: {best_acc:.4f}")
 

@@ -67,8 +67,8 @@ def k_fold_cross_validate(subject_data, encoder_class, num_classes=3, k_folds=5,
         
         print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
         
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Initialize model
         encoder = encoder_class(input_channels=3).to(device)

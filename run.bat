@@ -48,9 +48,19 @@ if "%choice%"=="12" goto option12
 if "%choice%"=="13" goto option13
 if "%choice%"=="14" goto option14
 if "%choice%"=="15" goto option15
-if "%choice%"=="15" goto option15
 if "%choice%"=="99" goto option99
 goto invalid
+
+:get_batch_size
+set /p batch_size="Enter Batch Size (default 1000, or 32 for pre-train): "
+if "!batch_size!"=="" (
+    if "%~1"=="pretrain" (
+        set batch_size=32
+    ) else (
+        set batch_size=1000
+    )
+)
+goto :eof
 
 :option1
 echo Running Test Run...
@@ -59,27 +69,31 @@ cd /d %PARENT_DIR%
 goto end
 
 :option2
-echo Running Pre-training (500 epochs)...
+call :get_batch_size pretrain
+echo Running Pre-training (500 epochs) with batch size !batch_size!...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size 32
+"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size !batch_size!
 goto end
 
 :option3
-echo Calculating Model Accuracy...
+call :get_batch_size
+echo Calculating Model Accuracy with batch size !batch_size!...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode evaluate --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode evaluate --epochs 100 --batch_size !batch_size!
 goto end
 
 :option4
-echo Training Ensemble (5 models)...
+call :get_batch_size
+echo Training Ensemble (5 models) with batch size !batch_size!...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode ensemble --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode ensemble --epochs 100 --batch_size !batch_size!
 goto end
 
 :option5
-echo Training Multi-Modal Fusion...
+call :get_batch_size
+echo Training Multi-Modal Fusion with batch size !batch_size!...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode multimodal --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode multimodal --epochs 100 --batch_size !batch_size!
 goto end
 
 :option6
@@ -93,14 +107,16 @@ echo 2. Multi-Modal Ensemble with 5 fusion models
 echo Expected accuracy: 85-88 percent
 echo Estimated time: 3-4 hours on CPU or 20-30 minutes on GPU
 echo.
+call :get_batch_size
+echo.
 pause
 echo.
 echo [Step 1/2] Pre-training encoder with all optimizations...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size !batch_size!
 echo.
 echo [Step 2/2] Training multi-modal ensemble...
-"%VENV_PYTHON%" -m stress_detection.main --mode multimodal_ensemble --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode multimodal_ensemble --epochs 100 --batch_size !batch_size!
 echo.
 echo ========================================
 echo   FULL PIPELINE COMPLETE
@@ -109,9 +125,10 @@ echo ========================================
 goto end
 
 :option7
-echo Training with SMOTE Oversampling...
+call :get_batch_size
+echo Training with SMOTE Oversampling with batch size !batch_size!...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode smote --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode smote --epochs 100 --batch_size !batch_size!
 goto end
 
 :option8
@@ -122,9 +139,11 @@ echo ========================================
 echo This will train and test on EACH subject
 echo Estimated time: 3-6 hours (15 subjects)
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size !batch_size!
 goto end
 
 :option9
@@ -135,9 +154,11 @@ echo ========================================
 echo Subject-invariant feature learning
 echo Expected improvement: 74%% -^> 78-82%% LOSO accuracy
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode dann --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode dann --epochs 100 --batch_size !batch_size!
 goto end
 
 :option10
@@ -148,9 +169,11 @@ echo ========================================
 echo Continuous stress monitoring
 echo Personalized baselines per subject
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode trajectory --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode trajectory --epochs 100 --batch_size !batch_size!
 goto end
 
 :option11
@@ -161,9 +184,11 @@ echo ========================================
 echo Using MMD + CORAL + Contrastive losses
 echo Expected improvement: 3-7%% accuracy gain
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode invariant --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode invariant --epochs 100 --batch_size !batch_size!
 goto end
 
 :option12
@@ -178,9 +203,11 @@ echo - Subject-Invariant Losses
 echo Expected: 82-86%% LOSO accuracy
 echo Estimated time: 2-3 hours on GPU
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode combined --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode combined --epochs 100 --batch_size !batch_size!
 goto end
 
 :option13
@@ -206,9 +233,11 @@ echo Improvement: +11-14%% absolute gain!
 echo.
 echo Estimated time: 6-8 hours on RTX 5070 Ti GPU
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode ultimate --epochs 100 --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode ultimate --epochs 100 --batch_size !batch_size!
 goto end
 
 :option14
@@ -231,9 +260,11 @@ echo.
 echo Estimated Time: 15-20 hours (full) or 3-4 hours (quick mode)
 echo ========================================
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size !batch_size!
 goto end
 
 :option15
@@ -251,9 +282,11 @@ echo.
 echo Estimated Time: 20-25 hours (full) or 4-6 hours (quick mode)
 echo ========================================
 echo.
+call :get_batch_size
+echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size 1000
+"%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size !batch_size!
 goto end
 
 :option99

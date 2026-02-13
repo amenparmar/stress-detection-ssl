@@ -51,8 +51,8 @@ def main():
             
         train_dataset = MockDataset()
         test_dataset = MockDataset()
-        train_loader = DataLoader(train_dataset, batch_size=10, shuffle=True, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=10, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Test SSL Loop
         print("Testing SSL Pre-training loop...")
@@ -81,7 +81,7 @@ def main():
         return
 
     train_dataset = WESADDataset(subject_data, mode='pretrain')
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
     
     if args.mode == 'pretrain':
         print("Starting SSL Pre-training...")
@@ -133,8 +133,8 @@ def main():
 
         print(f"Train samples: {len(train_dataset_eval)}, Test samples: {len(test_dataset_eval)}")
 
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
 
         train_linear_classifier(train_loader_eval, test_loader_eval, encoder, num_classes=3, epochs=args.epochs, device=device)
     
@@ -169,8 +169,8 @@ def main():
                 test_len = full_len - train_len
                 train_dataset_eval, test_dataset_eval = torch.utils.data.random_split(train_dataset_eval, [train_len, test_len])
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         train_ensemble(train_loader_eval, test_loader_eval, Encoder, num_models=5, 
                       num_classes=3, epochs=args.epochs, device=device)
@@ -206,8 +206,8 @@ def main():
                 test_len = full_len - train_len
                 train_dataset_eval, test_dataset_eval = torch.utils.data.random_split(train_dataset_eval, [train_len, test_len])
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Use multi-modal encoder
         multimodal_encoder = MultiModalFusionEncoder(base_filters=32, modality_dim=128, output_dim=256).to(device)
@@ -245,8 +245,8 @@ def main():
                 test_len = full_len - train_len
                 train_dataset_eval, test_dataset_eval = torch.utils.data.random_split(train_dataset_eval, [train_len, test_len])
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Train ensemble of multi-modal models
         ensemble_models = []
@@ -324,8 +324,8 @@ def main():
         train_dataset = WESADDataset(train_subjects, mode='classifier')
         test_dataset = WESADDataset(test_subjects, mode='classifier')
         
-        train_loader_eval = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Load pre-trained encoder
         encoder = Encoder(input_channels=3).to(device)
@@ -352,7 +352,7 @@ def main():
         # Run LOSO CV
         results, avg_acc, avg_f1 = leave_one_subject_out_cv(
             subject_data, Encoder, num_classes=3, 
-            epochs=args.epochs, device=device
+            epochs=args.epochs, batch_size=args.batch_size, device=device
         )
         
         print(f"\nLOSO CV Complete!")
@@ -387,8 +387,8 @@ def main():
         train_dataset_eval = WESADDataset(train_data_split, mode='classifier')
         test_dataset_eval = WESADDataset(test_data_split, mode='classifier')
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=0)
+        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         # Get number of subjects for domain classifier
         num_subjects = len(subjects)
@@ -576,7 +576,7 @@ def main():
             print("="*80)
             
             ssl_dataset = WESADDataset(subject_data, mode='pretrain')
-            ssl_loader = DataLoader(ssl_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
+            ssl_loader = DataLoader(ssl_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
             
             encoder = Encoder(input_channels=3).to(device)
             projection_head = SSLHead(input_dim=256, hidden_dim=128, output_dim=128).to(device)
@@ -622,8 +622,8 @@ def main():
         train_dataset = WESADDataset(train_data_split, mode='classifier')
         test_dataset = WESADDataset(test_data_split, mode='classifier')
         
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=0)
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         num_subjects = len(subjects)
         ensemble_models = []
@@ -737,8 +737,8 @@ def main():
         test_data_split = {k: subject_data[k] for k in test_subjects}
         train_dataset_bench = WESADDataset(train_data_split, mode='supervised')
         test_dataset_bench = WESADDataset(test_data_split, mode='supervised')
-        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
-        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=0)
+        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         print("\n" + "="*80)
         print(" BENCHMARK MODE: RUN ALL MODELS AND RANK BY ACCURACY")
@@ -779,8 +779,8 @@ def main():
         test_data_split = {k: subject_data[k] for k in test_subjects}
         train_dataset_bench = WESADDataset(train_data_split, mode='supervised')
         test_dataset_bench = WESADDataset(test_data_split, mode='supervised')
-        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=0)
-        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=0)
+        train_loader = DataLoader(train_dataset_bench, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4, persistent_workers=True)
+        test_loader = DataLoader(test_dataset_bench, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=4, persistent_workers=True)
         
         print("\n" + "="*80)
         print("🏆 ADVANCED BENCHMARK: ALL STATE-OF-THE-ART TECHNIQUES")

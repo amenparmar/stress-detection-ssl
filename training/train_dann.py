@@ -65,6 +65,9 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
     print(f"Epochs: {epochs}, Learning Rate: {lr}")
     print("="*80 + "\n")
     
+    # Initialize AMP scaler
+    scaler = torch.cuda.amp.GradScaler()
+    
     for epoch in range(epochs):
         # Update GRL lambda (increases from 0 to 1)
         lambda_ = compute_lambda_schedule(epoch, epochs)
@@ -89,7 +92,6 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
             if len(batch_data) == 3:
                 data, stress_labels, subject_ids = batch_data
             else:
-                # Fallback if subject IDs not available
                 data, stress_labels = batch_data
                 subject_ids = torch.zeros(data.size(0), dtype=torch.long)
             
@@ -100,73 +102,57 @@ def train_dann(train_loader, test_loader, encoder, num_classes=3, num_subjects=1
                 stress_labels = stress_labels[valid_mask]
                 subject_ids = subject_ids[valid_mask]
             
-            if len(stress_labels) == 0:  # Skip batch if no valid labels
+            if len(stress_labels) == 0:
                 continue
             
-            stress_labels = stress_labels - 1  # Remap: 1→0, 2→1, 3→2
+            stress_labels = stress_labels - 1
             
-            data = data.to(device)
-            stress_labels = stress_labels.to(device)
-            subject_ids = subject_ids.to(device)
+            data = data.to(device, non_blocking=True)
+            stress_labels = stress_labels.to(device, non_blocking=True)
+            subject_ids = subject_ids.to(device, non_blocking=True)
             
             batch_size = data.size(0)
             
-            # ============================================
-            # 1. Update Stress Classifier & Encoder
-            # ============================================
-            encoder_optimizer.zero_grad()
-            stress_optimizer.zero_grad()
-            domain_optimizer.zero_grad()
+            encoder_optimizer.zero_grad(set_to_none=True)
+            stress_optimizer.zero_grad(set_to_none=True)
+            domain_optimizer.zero_grad(set_to_none=True)
             
-            # Forward pass
-            features = encoder(data)  # (Batch, 256)
+            # AMP: Automatic Mixed Precision
+            with torch.cuda.amp.autocast():
+                # Forward pass
+                features = encoder(data)
+                stress_logits = stress_classifier(features)
+                stress_loss = stress_criterion(stress_logits, stress_labels)
+                
+                reversed_features = grl(features)
+                domain_logits = domain_classifier(reversed_features)
+                domain_loss = domain_criterion(domain_logits, subject_ids)
+                
+                total_batch_loss = stress_loss + alpha * domain_loss
             
-            # Stress classification
-            stress_logits = stress_classifier(features)
-            stress_loss = stress_criterion(stress_logits, stress_labels)
+            # Backward pass with Scaling
+            scaler.scale(total_batch_loss).backward()
+            scaler.step(encoder_optimizer)
+            scaler.step(stress_optimizer)
+            scaler.step(domain_optimizer)
+            scaler.update()
             
-            # Domain classification (through GRL)
-            reversed_features = grl(features)
-            domain_logits = domain_classifier(reversed_features)
-            domain_loss = domain_criterion(domain_logits, subject_ids)
-            
-            # Combined loss
-            # Encoder tries to: minimize stress loss + maximize domain loss
-            # (GRL reverses domain gradient, so encoder maximizes domain loss)
-            total_batch_loss = stress_loss + alpha * domain_loss
-            
-            # Backward pass
-            total_batch_loss.backward()
-            
-            # Update parameters
-            encoder_optimizer.step()
-            stress_optimizer.step()
-            domain_optimizer.step()
-            
-            # ============================================
             # Metrics
-            # ============================================
             total_loss += total_batch_loss.item()
             total_stress_loss += stress_loss.item()
             total_domain_loss += domain_loss.item()
             
-            # Stress accuracy
             _, stress_pred = torch.max(stress_logits, 1)
             stress_correct += (stress_pred == stress_labels).sum().item()
             
-            # Domain accuracy (lower is better!)
             domain_acc = compute_domain_accuracy(domain_logits, subject_ids)
             domain_acc_sum += domain_acc
-            
             total_samples += batch_size
             
-            # Update progress bar
             progress_bar.set_postfix({
-                'loss': total_batch_loss.item(),
-                'stress_loss': stress_loss.item(),
-                'domain_loss': domain_loss.item(),
-                'lambda': lambda_,
-                'domain_acc': domain_acc
+                'loss': f"{total_batch_loss.item():.4f}",
+                'stress_loss': f"{stress_loss.item():.4f}",
+                'domain_acc': f"{domain_acc:.4f}"
             })
         
         # Epoch statistics
