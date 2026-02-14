@@ -238,7 +238,7 @@ def benchmark_advanced_models(train_loader, test_loader, device='cpu', quick_mod
     encoder_ult = Encoder(input_channels=3, output_dim=256).to(device)
     print(f"  Training Ultimate model ({train_epochs} epochs)...")
     # train_ultimate_model returns (encoder, classifier, domain_classifier, trajectory_analyzer, best_acc)
-    _, ult_classifier, ult_domain_clf, ult_traj_analyzer, _ = train_ultimate_model(
+    encoder_ult, ult_classifier, ult_domain_clf, ult_traj_analyzer, _ = train_ultimate_model(
         train_loader, test_loader, encoder_ult, 
         num_classes=3, num_subjects=15, epochs=train_epochs, device=device
     )

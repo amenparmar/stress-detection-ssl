@@ -13,6 +13,8 @@ from training.invariant_losses import SubjectInvariantLoss
 from sklearn.metrics import accuracy_score, f1_score
 
 
+from models.multimodal_encoder import MultiModalFusionEncoder
+
 def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_subjects=15,
                         epochs=100, device='cpu', lr=3e-4, 
                         alpha=0.1, beta=0.05, gamma=0.05, delta=0.02):
@@ -93,23 +95,59 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
     if os.path.exists(checkpoint_path):
         print(f"Found checkpoint at {checkpoint_path}. Resuming...")
         checkpoint = torch.load(checkpoint_path, map_location=device)
+        
+        # Auto-detect architecture mismatch
+        encoder_keys = checkpoint['encoder'].keys()
+        is_multimodal_checkpoint = any('eda_encoder' in k for k in encoder_keys)
+        # Using hasattr is safer than isinstance due to potential reload issues, but isinstance is generally fine
+        is_multimodal_instance = isinstance(encoder, MultiModalFusionEncoder)
+        
+        if is_multimodal_checkpoint and not is_multimodal_instance:
+            print("⚠️ Architecture Mismatch Detected!")
+            print("  Checkpoint contains MultiModalFusionEncoder weights, but passed encoder is Standard Encoder.")
+            print("  Switching to MultiModalFusionEncoder...")
+            encoder = MultiModalFusionEncoder(base_filters=32, modality_dim=128, output_dim=256).to(device)
+            # Re-initialize optimizer for new parameters
+            encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-5)
+            
         start_epoch = checkpoint['epoch'] + 1
         best_test_acc = checkpoint['best_test_acc']
+        
         encoder.load_state_dict(checkpoint['encoder'])
         classifier.load_state_dict(checkpoint['classifier'])
         domain_classifier.load_state_dict(checkpoint['domain_classifier'])
         trajectory_analyzer.load_state_dict(checkpoint['trajectory_analyzer'])
-        encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
-        classifier_optimizer.load_state_dict(checkpoint['classifier_optimizer'])
-        domain_optimizer.load_state_dict(checkpoint['domain_optimizer'])
-        trajectory_optimizer.load_state_dict(checkpoint['trajectory_optimizer'])
+        
+        # Load optimizer states
+        try:
+             encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+             classifier_optimizer.load_state_dict(checkpoint['classifier_optimizer'])
+             domain_optimizer.load_state_dict(checkpoint['domain_optimizer'])
+             trajectory_optimizer.load_state_dict(checkpoint['trajectory_optimizer'])
+        except ValueError as e:
+            print(f"Warning: Could not load optimizer states (likely architecture change): {e}")
+            print("Continuing with fresh optimizers.")
+            
         print(f"Resuming from epoch {start_epoch+1}")
     
     elif os.path.exists('stress_detection/models/encoder_ultimate.pth'):
         print(f"Fallback: Resuming from best weights at stress_detection/models/encoder_ultimate.pth")
         print("Note: Starting at epoch 0, re-initializing optimizers and domain classifier.")
         try:
-            encoder.load_state_dict(torch.load('stress_detection/models/encoder_ultimate.pth', map_location=device))
+            state_dict = torch.load('stress_detection/models/encoder_ultimate.pth', map_location=device)
+            
+            # Auto-detect architecture mismatch for fallback too
+            encoder_keys = state_dict.keys()
+            is_multimodal_checkpoint = any('eda_encoder' in k for k in encoder_keys)
+            is_multimodal_instance = isinstance(encoder, MultiModalFusionEncoder)
+            
+            if is_multimodal_checkpoint and not is_multimodal_instance:
+                print("⚠️ Architecture Mismatch Detected in Fallback!")
+                print("  Switching to MultiModalFusionEncoder...")
+                encoder = MultiModalFusionEncoder(base_filters=32, modality_dim=128, output_dim=256).to(device)
+                encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-5)
+            
+            encoder.load_state_dict(state_dict)
             
             if os.path.exists('stress_detection/models/classifier_ultimate.pth'):
                 classifier.load_state_dict(torch.load('stress_detection/models/classifier_ultimate.pth', map_location=device))
