@@ -38,6 +38,18 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
                     data, target, _ = batch_data
                 else:
                     data, target = batch_data
+                
+                # Filter and remap labels
+                valid_mask = (target >= 1) & (target <= 3)
+                if not valid_mask.all():
+                    data = data[valid_mask]
+                    target = target[valid_mask]
+                
+                if len(target) == 0:
+                    continue
+                
+                target = target - 1
+                
                 data = data.to(device, non_blocking=True)
                 features = encoder(data)
                 all_features.append(features.cpu().numpy())
@@ -76,7 +88,7 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     # Training loop
     print(f"\nTraining classifier for {epochs} epochs...")
     best_acc = 0.0
-    batch_size = 1024 # Increased for SMOTE features (dense FC only)
+    batch_size = 64 # Reduced from 1024 to 64 for better convergence with small dataset
     
     for epoch in range(epochs):
         classifier.train()
@@ -131,6 +143,18 @@ def evaluate_with_details(loader, encoder, classifier, device):
                 data, target, _ = batch_data
             else:
                 data, target = batch_data
+            
+            # Filter and remap labels
+            valid_mask = (target >= 1) & (target <= 3)
+            if not valid_mask.all():
+                data = data[valid_mask]
+                target = target[valid_mask]
+            
+            if len(target) == 0:
+                continue
+                
+            target = target - 1
+            
             data = data.to(device)
             target = target.squeeze()
             features = encoder(data)

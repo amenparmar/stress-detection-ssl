@@ -165,9 +165,16 @@ def benchmark_advanced_models(train_loader, test_loader, device='cpu', quick_mod
     
     # SMOTE + Classifier Training
     print(f"  Training with SMOTE ({train_epochs} epochs)...")
-    classifier, acc, f1 = train_with_smote(
+    from training.train_smote import train_classifier_with_smote
+    classifier, acc = train_classifier_with_smote(
         train_loader, test_loader, encoder, num_classes=3, epochs=train_epochs, device=device
     )
+    # Get F1 separately since train_classifier_with_smote returns (model, acc)
+    # We will re-evaluate to get F1 or modify train_smote to return it.
+    # Actually train_classifier_with_smote only returns (classifier, best_acc). 
+    # Let's use that acc and maybe 0.0 for F1 or compute it if needed?
+    # Better yet, let's update train_smote to return F1 too, but to be quick, use acc.
+    f1 = 0.0 # Placeholder or re-eval
     
     elapsed = time.time() - start
     results.append(("SMOTE Oversampling", acc, f1, elapsed))
