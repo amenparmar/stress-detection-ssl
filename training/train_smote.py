@@ -79,7 +79,7 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     
     # Create classifier
     classifier = nn.Linear(256, num_classes).to(device)
-    optimizer = optim.Adam(classifier.parameters(), lr=3e-4)
+    optimizer = optim.Adam(classifier.parameters(), lr=1e-3)
     criterion = nn.CrossEntropyLoss()
     
     # Initialize AMP scaler
@@ -88,7 +88,7 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     # Training loop
     print(f"\nTraining classifier for {epochs} epochs...")
     best_acc = 0.0
-    batch_size = 64 # Reduced from 1024 to 64 for better convergence with small dataset
+    batch_size = 32 # Restored to 32 to match previous benchmark performance
     
     for epoch in range(epochs):
         classifier.train()
@@ -156,7 +156,9 @@ def evaluate_with_details(loader, encoder, classifier, device):
             target = target - 1
             
             data = data.to(device)
-            target = target.squeeze()
+            # Ensure target is 1D (avoid squeeze turning 1-element batch into scalar)
+            target = target.view(-1)
+            
             features = encoder(data)
             output = classifier(features)
             preds = torch.argmax(output, dim=1)
