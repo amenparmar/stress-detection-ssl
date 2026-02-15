@@ -79,7 +79,8 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     
     # Create classifier
     classifier = nn.Linear(256, num_classes).to(device)
-    optimizer = optim.Adam(classifier.parameters(), lr=1e-3)
+    optimizer = optim.Adam(classifier.parameters(), lr=1e-3, weight_decay=1e-4) # Added weight decay
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5) # Decay LR by 0.5 every 30 epochs
     criterion = nn.CrossEntropyLoss()
     
     # Initialize AMP scaler
@@ -88,7 +89,7 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     # Training loop
     print(f"\nTraining classifier for {epochs} epochs...")
     best_acc = 0.0
-    batch_size = 32 # Restored to 32 to match previous benchmark performance
+    batch_size = 32
     
     for epoch in range(epochs):
         classifier.train()
@@ -125,6 +126,8 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
                 best_acc = acc
                 torch.save(classifier.state_dict(), 'stress_detection/models/classifier_best.pth')
                 print(f"  ✓ New best: {best_acc:.4f}")
+        
+        scheduler.step()
     
     print(f"\nTraining complete! Best accuracy: {best_acc:.4f}")
     return classifier, best_acc
