@@ -124,9 +124,14 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
              classifier_optimizer.load_state_dict(checkpoint['classifier_optimizer'])
              domain_optimizer.load_state_dict(checkpoint['domain_optimizer'])
              trajectory_optimizer.load_state_dict(checkpoint['trajectory_optimizer'])
-        except ValueError as e:
+        except (ValueError, RuntimeError) as e:
             print(f"Warning: Could not load optimizer states (likely architecture change): {e}")
-            print("Continuing with fresh optimizers.")
+            print("Continuing with fresh optimizers (re-initializing)...")
+            # Re-initialize all optimizers to be safe
+            encoder_optimizer = optim.Adam(encoder.parameters(), lr=lr, weight_decay=1e-5)
+            domain_optimizer = optim.Adam(domain_classifier.parameters(), lr=lr)
+            classifier_optimizer = optim.Adam(classifier.parameters(), lr=lr)
+            trajectory_optimizer = optim.Adam(trajectory_analyzer.parameters(), lr=lr)
             
         print(f"Resuming from epoch {start_epoch+1}")
     
@@ -204,7 +209,9 @@ def train_ultimate_model(train_loader, test_loader, encoder, num_classes=3, num_
             if len(batch_data) == 3:
                 data, stress_labels, subject_ids = batch_data
             else:
+                 # Fallback for compatibility, but warn if subject_ids missing
                 data, stress_labels = batch_data
+                # print("Warning: No subject IDs found in batch. Ultimate model domain components will fail.")
                 subject_ids = torch.zeros(data.size(0), dtype=torch.long)
             
             # Filter and remap labels: remove label 4 (meditation), remap 1,2,3 to 0,1,2
