@@ -56,31 +56,41 @@ goto invalid
 :option1
 echo Running Test Run...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode test_run
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode test_run --batch_size %SELECTED_BATCH%
 goto end
 
 :option2
 echo Running Pre-training (500 epochs)...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size %SELECTED_BATCH%
 goto end
 
 :option3
 echo Calculating Model Accuracy...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode evaluate --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode evaluate --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option4
 echo Training Ensemble (5 models)...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode ensemble --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode ensemble --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option5
 echo Training Multi-Modal Fusion...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode multimodal --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode multimodal --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option6
@@ -98,10 +108,12 @@ pause
 echo.
 echo [Step 1/2] Pre-training encoder with all optimizations...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size for full pipeline (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode pretrain --epochs 500 --batch_size %SELECTED_BATCH%
 echo.
 echo [Step 2/2] Training multi-modal ensemble...
-"%VENV_PYTHON%" -m stress_detection.main --mode multimodal_ensemble --epochs 100 --batch_size 32
+"%VENV_PYTHON%" -m stress_detection.main --mode multimodal_ensemble --epochs 100 --batch_size %SELECTED_BATCH%
 echo.
 echo ========================================
 echo   FULL PIPELINE COMPLETE
@@ -112,7 +124,9 @@ goto end
 :option7
 echo Training with SMOTE Oversampling...
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode smote --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode smote --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option8
@@ -125,7 +139,9 @@ echo Estimated time: 3-6 hours (15 subjects)
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode loso --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option9
@@ -138,7 +154,9 @@ echo Expected improvement: 74%% -^> 78-82%% LOSO accuracy
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode dann --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode dann --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option10
@@ -151,7 +169,9 @@ echo Personalized baselines per subject
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode trajectory --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode trajectory --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option11
@@ -164,7 +184,9 @@ echo Expected improvement: 3-7%% accuracy gain
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode invariant --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode invariant --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option12
@@ -181,7 +203,9 @@ echo Estimated time: 2-3 hours on GPU
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode combined --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode combined --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option13
@@ -209,7 +233,9 @@ echo Estimated time: 6-8 hours on RTX 5070 Ti GPU
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode ultimate --epochs 100 --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode ultimate --epochs 100 --batch_size %SELECTED_BATCH%
 goto end
 
 :option14
@@ -234,7 +260,9 @@ echo ========================================
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode benchmark --batch_size %SELECTED_BATCH%
 goto end
 
 :option15
@@ -254,7 +282,9 @@ echo ========================================
 echo.
 pause
 cd /d %PARENT_DIR%
-"%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size 32
+set /p SELECTED_BATCH=Enter batch size (default 200, press Enter for default): 
+if "%SELECTED_BATCH%"=="" set SELECTED_BATCH=200
+"%VENV_PYTHON%" -m stress_detection.main --mode advanced_benchmark --batch_size %SELECTED_BATCH%
 goto end
 
 :option99

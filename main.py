@@ -10,7 +10,29 @@ from stress_detection.models.ssl_head import SSLHead
 from stress_detection.training.train_ssl import train_simclr
 from stress_detection.training.train_classifier import train_linear_classifier
 from stress_detection.training.loss import NTXentLoss
-from stress_detection.utils.config import *
+import importlib.util
+import sys
+from pathlib import Path
+
+# Ensure we load the package-local config (avoid colliding top-level `utils` package)
+_pkg_dir = Path(__file__).resolve().parent
+_config_path = _pkg_dir / 'utils' / 'config.py'
+if _config_path.exists():
+    spec = importlib.util.spec_from_file_location('stress_detection.utils.config', str(_config_path))
+    _config_mod = importlib.util.module_from_spec(spec)
+    sys.modules['stress_detection.utils.config'] = _config_mod
+    spec.loader.exec_module(_config_mod)
+    # bring public names into module globals
+    for _k, _v in vars(_config_mod).items():
+        if not _k.startswith('_'):
+            globals()[_k] = _v
+else:
+    # fallback to absolute import (may raise)
+    from stress_detection.utils.config import *
+
+# Fallback defaults if config failed to populate expected names
+if 'WESAD_dataset_path' not in globals():
+    WESAD_dataset_path = os.environ.get('WESAD_DATASET_PATH', '/media/amenparmar/Data/scratch/stress_detection/WESAD')
 
 def main():
     parser = argparse.ArgumentParser(description="Self-Supervised Stress Detection")
@@ -19,7 +41,81 @@ def main():
                        help='Mode: pretrain (SSL), evaluate (Classifier), test_run (Dry Run), ensemble (5 models), multimodal (Fusion), multimodal_ensemble (Best), smote (SMOTE oversampling), loso (Leave-One-Subject-Out CV), dann (Domain Adversarial), trajectory (Latent Trajectory), invariant (Subject-Invariant Loss), combined (All Advanced Techniques), ultimate (MAXIMUM PERFORMANCE - All Techniques + Ensemble), benchmark (Basic Models), advanced_benchmark (Advanced Techniques)')
     parser.add_argument('--epochs', type=int, default=EPOCHS, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='Batch size')
+    parser.add_argument('--profile', action='store_true', help='Run short AMP stress test to measure GPU utilization')
+    parser.add_argument('--profile_long', action='store_true', help='Run a longer profiled training run (torch.profiler)')
     args = parser.parse_args()
+
+    # Dynamically adjust batch size based on available GPU memory when not overridden
+    def suggest_batch_size_by_gpu(default_batch):
+        # Prefer querying current free GPU memory (nvidia-smi) to account for other processes.
+        try:
+            if torch.cuda.is_available():
+                import subprocess
+                try:
+                    out = subprocess.check_output([
+                        "nvidia-smi",
+                        "--query-gpu=memory.free",
+                        "--format=csv,noheader,nounits"
+                    ])
+                    free_mb = int(out.decode().strip().splitlines()[0])
+                    free_gb = free_mb / 1024.0
+                    # Use a simple proportional rule: ~8 samples per GB of free memory
+                    suggested = max(default_batch, min(200, int(free_gb * 8)))
+                    print(f"Detected free GPU memory: {free_gb:.2f} GB -> suggesting batch size {suggested}")
+                    return suggested
+                except Exception:
+                    # Fallback to total memory if nvidia-smi not available
+                    props = torch.cuda.get_device_properties(0)
+                    total_gb = props.total_memory / (1024 ** 3)
+                    suggested = max(default_batch, min(200, int(total_gb * 8)))
+                    return suggested
+        except Exception:
+            pass
+        return default_batch
+
+    # Only auto-adjust when the user didn't explicitly pass a different batch size
+    # (i.e., args.batch_size equals the config default)
+    if args.batch_size == BATCH_SIZE:
+        suggested = suggest_batch_size_by_gpu(BATCH_SIZE)
+        # allow a small multiplier when memory headroom exists to better saturate GPU
+        try:
+            multiplier = float(os.environ.get('BATCH_MULTIPLIER', '1.25'))
+        except Exception:
+            multiplier = 1.25
+        suggested = min(200, int(suggested * multiplier))
+        if suggested != BATCH_SIZE:
+            print(f"Auto-adjusting batch size from {BATCH_SIZE} -> {suggested} based on GPU memory and multiplier={multiplier}")
+            args.batch_size = suggested
+
+    # Enable cuDNN autotuner to select best algorithms for current config
+    try:
+        torch.backends.cudnn.benchmark = True
+    except Exception:
+        pass
+
+    # Allow the process to use up to 90% of GPU memory (if supported)
+    try:
+        if torch.cuda.is_available() and hasattr(torch.cuda, 'set_per_process_memory_fraction'):
+            torch.cuda.set_per_process_memory_fraction(0.9, 0)
+    except Exception:
+        pass
+
+    # DataLoader factory to increase throughput and better saturate GPU
+    import multiprocessing
+    def make_loader(dataset, batch_size, shuffle=False, drop_last=False):
+        num_workers = min(8, max(1, (multiprocessing.cpu_count() or 2) // 2))
+        kwargs = {
+            'batch_size': batch_size,
+            'shuffle': shuffle,
+            'drop_last': drop_last,
+            'num_workers': num_workers,
+            'pin_memory': True
+        }
+        # Add prefetch_factor if supported
+        try:
+            return DataLoader(dataset, prefetch_factor=2, **kwargs)
+        except TypeError:
+            return DataLoader(dataset, **kwargs)
 
     # GPU selection (CUDA_VISIBLE_DEVICES=1 is set in run.bat to use only NVIDIA GPU)
     if torch.cuda.is_available():
@@ -32,6 +128,29 @@ def main():
     # Initialize Model
     encoder = Encoder(input_channels=3).to(device)
     projection_head = SSLHead(input_dim=256, hidden_dim=256, output_dim=128).to(device)
+    # Long profiling mode: run a small pretrain under torch.profiler to capture hotspot data
+    if args.profile_long and torch.cuda.is_available():
+        print("Running longer profiler session (1 epoch SimCLR on synthetic data)...")
+        from torch.profiler import profile, ProfilerActivity
+        # Create synthetic dataset sized to provide a few dozen steps
+        N_STEPS = 40
+        samples = max(args.batch_size * N_STEPS, 256)
+        dummy_data = torch.randn(samples, 3, 240)
+        dummy_labels = torch.zeros(samples, dtype=torch.long)
+        class SmallDS(torch.utils.data.Dataset):
+            def __len__(self): return samples
+            def __getitem__(self, idx): return dummy_data[idx], dummy_labels[idx]
+
+        prof_loader = make_loader(SmallDS(), args.batch_size, shuffle=True)
+        criterion = NTXentLoss(batch_size=args.batch_size, temperature=TEMPERATURE, device=device)
+        optimizer = torch.optim.Adam(list(encoder.parameters()) + list(projection_head.parameters()), lr=LEARNING_RATE)
+
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
+            train_simclr(prof_loader, encoder, projection_head, optimizer, None, criterion, epochs=1, device=device)
+        print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20))
+        prof.export_chrome_trace('/tmp/torch_profiler_trace.json')
+        print('Saved trace to /tmp/torch_profiler_trace.json')
+        return
     
     # Mock Data for Test Run
     if args.mode == 'test_run':
@@ -48,21 +167,51 @@ def main():
             
         train_dataset = MockDataset()
         test_dataset = MockDataset()
-        train_loader = DataLoader(train_dataset, batch_size=10, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False)
+        train_loader = make_loader(train_dataset, batch_size=10, shuffle=True)
+        test_loader = make_loader(test_dataset, batch_size=10, shuffle=False)
         
-        # Test SSL Loop
+        # If profiling requested, run a short AMP stress test loop here to measure GPU utilization
+        if args.profile and torch.cuda.is_available():
+            print("Running short AMP stress test (5 steps) to warm GPU and measure utilization...")
+            from torch.cuda.amp import autocast, GradScaler
+            scaler = GradScaler()
+            optimizer = torch.optim.Adam(list(encoder.parameters()) + list(projection_head.parameters()), lr=LEARNING_RATE)
+            steps = 5
+            stress_loader = make_loader(train_dataset, batch_size=args.batch_size, shuffle=True)
+            it = iter(stress_loader)
+            encoder.train(); projection_head.train()
+            for step in range(steps):
+                try:
+                    xb, yb = next(it)
+                except StopIteration:
+                    it = iter(stress_loader); xb, yb = next(it)
+                xb = xb.to(device)
+                optimizer.zero_grad()
+                with autocast():
+                    z = encoder(xb)
+                    p = projection_head(z)
+                    loss = (p**2).mean()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                if step % 1 == 0:
+                    print(f"stress step {step+1}/{steps} loss={loss.item():.4f}")
+            torch.cuda.synchronize()
+            print("AMP stress test complete — check `nvidia-smi` or profiler for utilization details.")
+            return
+
+        # Test SSL Loop (fallback quick test without changing training internals)
         print("Testing SSL Pre-training loop...")
         criterion = NTXentLoss(batch_size=10, temperature=TEMPERATURE, device=device)
         optimizer = torch.optim.Adam(list(encoder.parameters()) + list(projection_head.parameters()), lr=LEARNING_RATE)
         train_simclr(train_loader, encoder, projection_head, optimizer, None, criterion, epochs=1, device=device)
-        
+
         # Test Classifier Loop
         print("Testing Classifier loop...")
         # Re-init encoder/classifier for clean state
-        encoder = Encoder(input_channels=3).to(device) 
+        encoder = Encoder(input_channels=3).to(device)
         train_linear_classifier(train_loader, test_loader, encoder, num_classes=3, epochs=1, device=device)
-        
+
         print("Test Run Successful!")
         return
 
@@ -78,7 +227,7 @@ def main():
         return
 
     train_dataset = WESADDataset(subject_data, mode='pretrain')
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=False)
+    train_loader = make_loader(train_dataset, args.batch_size, shuffle=True, drop_last=False)
     
     if args.mode == 'pretrain':
         print("Starting SSL Pre-training...")
@@ -130,8 +279,8 @@ def main():
 
         print(f"Train samples: {len(train_dataset_eval)}, Test samples: {len(test_dataset_eval)}")
 
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False)
+        train_loader_eval = make_loader(train_dataset_eval, args.batch_size, shuffle=True, drop_last=False)
+        test_loader_eval = make_loader(test_dataset_eval, args.batch_size, shuffle=False, drop_last=False)
 
         train_linear_classifier(train_loader_eval, test_loader_eval, encoder, num_classes=3, epochs=args.epochs, device=device)
     
@@ -166,8 +315,8 @@ def main():
                 test_len = full_len - train_len
                 train_dataset_eval, test_dataset_eval = torch.utils.data.random_split(train_dataset_eval, [train_len, test_len])
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False)
+        train_loader_eval = make_loader(train_dataset_eval, args.batch_size, shuffle=True, drop_last=False)
+        test_loader_eval = make_loader(test_dataset_eval, args.batch_size, shuffle=False, drop_last=False)
         
         train_ensemble(train_loader_eval, test_loader_eval, Encoder, num_models=5, 
                       num_classes=3, epochs=args.epochs, device=device)
@@ -203,8 +352,8 @@ def main():
                 test_len = full_len - train_len
                 train_dataset_eval, test_dataset_eval = torch.utils.data.random_split(train_dataset_eval, [train_len, test_len])
         
-        train_loader_eval = DataLoader(train_dataset_eval, batch_size=args.batch_size, shuffle=True, drop_last=False)
-        test_loader_eval = DataLoader(test_dataset_eval, batch_size=args.batch_size, shuffle=False, drop_last=False)
+        train_loader_eval = make_loader(train_dataset_eval, args.batch_size, shuffle=True, drop_last=False)
+        test_loader_eval = make_loader(test_dataset_eval, args.batch_size, shuffle=False, drop_last=False)
         
         # Use multi-modal encoder
         multimodal_encoder = MultiModalFusionEncoder(base_filters=32, modality_dim=128, output_dim=256).to(device)
@@ -552,10 +701,8 @@ def main():
         print("Estimated time: 6-8 hours on RTX 5070 Ti GPU")
         print("="*80)
         
-        from training.train_ssl import train_simclr
         from training.train_ultimate import train_ultimate_model
         from models.multimodal_encoder import MultiModalFusionEncoder
-        from training.loss import NTXentLoss
         import torch.optim as optim
         import numpy as np
         

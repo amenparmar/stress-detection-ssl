@@ -7,6 +7,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from data.augmentation import SignalAugmentation
+from torch.cuda.amp import autocast, GradScaler
 
 def train_simclr(train_loader, encoder, projection_head, optimizer, scheduler, criterion, epochs, device):
     """
@@ -23,6 +24,7 @@ def train_simclr(train_loader, encoder, projection_head, optimizer, scheduler, c
         magnitude_warp_sigma=0.3
     )
     
+    scaler = GradScaler() if device.type == 'cuda' else None
     for epoch in range(epochs):
         total_loss = 0
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
@@ -49,20 +51,26 @@ def train_simclr(train_loader, encoder, projection_head, optimizer, scheduler, c
             x_i = torch.stack(x_i_list)
             x_j = torch.stack(x_j_list)
             
-            # Forward pass
-            h_i = encoder(x_i)
-            h_j = encoder(x_j)
-            
-            z_i = projection_head(h_i)
-            z_j = projection_head(h_j)
-            
-            # Compute contrastive loss
-            loss = criterion(z_i, z_j)
-            
-            # Backward and optimize
+            # Forward pass with AMP
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            if scaler is not None:
+                with autocast():
+                    h_i = encoder(x_i)
+                    h_j = encoder(x_j)
+                    z_i = projection_head(h_i)
+                    z_j = projection_head(h_j)
+                    loss = criterion(z_i, z_j)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                h_i = encoder(x_i)
+                h_j = encoder(x_j)
+                z_i = projection_head(h_i)
+                z_j = projection_head(h_j)
+                loss = criterion(z_i, z_j)
+                loss.backward()
+                optimizer.step()
             
             total_loss += loss.item()
             progress_bar.set_postfix({'loss': loss.item()})

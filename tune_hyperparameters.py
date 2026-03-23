@@ -12,7 +12,7 @@ def grid_search_hyperparameters(subject_data, device='cpu'):
     
     # Define hyperparameter grid
     param_grid = {
-        'batch_size': [16, 32, 64],
+        'batch_size': [16, 32, 64, 128, 200],
         'learning_rate': [1e-4, 3e-4, 1e-3],
         'epochs': [50, 100],
     }

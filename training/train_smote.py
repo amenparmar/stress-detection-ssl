@@ -78,7 +78,7 @@ def train_classifier_with_smote(train_loader, test_loader, encoder, num_classes,
     # Training loop
     print(f"\nTraining classifier for {epochs} epochs...")
     best_acc = 0.0
-    batch_size = 64
+    batch_size = 200
     
     for epoch in range(epochs):
         classifier.train()

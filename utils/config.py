@@ -4,6 +4,7 @@ import os
 # Data Paths
 # TODO: Update this path to where your WESAD dataset is located
 WESAD_dataset_path = r'C:\Users\amenp\Downloads\WESAD' 
+#WESAD_dataset_path = "/media/amenparmar/Data/scratch/stress_detection/WESAD"
 
 # Signal Parameters
 FS_dict = {'ACC': 32, 'BVP': 64, 'EDA': 4, 'TEMP': 4}
@@ -11,7 +12,7 @@ WINDOW_SIZE = 60  # seconds - Optimal for dataset size and accuracy balance
 WINDOW_SHIFT = 0.25 # seconds (overlap)
 
 # Training Hyperparameters
-BATCH_SIZE = 32  # Reduced from 128 for better convergence with limited data
+BATCH_SIZE = 200  # Increased for 12GB GPU (RTX 5070 Ti) to utilize more memory
 LEARNING_RATE = 3e-4
 EPOCHS = 500  # Increased from 300 for even better SSL convergence
 TEMPERATURE = 0.1 # For NT-Xent loss

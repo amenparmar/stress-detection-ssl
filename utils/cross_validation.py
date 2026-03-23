@@ -6,7 +6,7 @@ from sklearn.model_selection import KFold
 from tqdm import tqdm
 
 def k_fold_cross_validate(subject_data, encoder_class, num_classes=3, k_folds=5, 
-                          epochs=50, batch_size=32, device='cpu'):
+                          epochs=50, batch_size=200, device='cpu'):
     """
     Perform k-fold cross-validation for stress detection model.
     

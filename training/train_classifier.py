@@ -5,6 +5,7 @@ import torch.optim as optim
 from sklearn.metrics import accuracy_score, f1_score
 from tqdm import tqdm
 from ..models.encoder import Encoder
+from torch.cuda.amp import autocast, GradScaler
 
 def train_linear_classifier(train_loader, test_loader, encoder, num_classes, epochs, device, finetune_encoder=False):
     """
@@ -98,6 +99,7 @@ def train_linear_classifier(train_loader, test_loader, encoder, num_classes, epo
     
     best_acc = 0.0
     
+    scaler = GradScaler() if device.type == 'cuda' else None
     for epoch in range(epochs):
         # Set modes
         if finetune_encoder:
@@ -107,20 +109,45 @@ def train_linear_classifier(train_loader, test_loader, encoder, num_classes, epo
         
         for data, target in tqdm(train_loader, desc=f"Classifier Epoch {epoch+1}"):
             data, target = data.to(device), target.squeeze().to(device)
-            
             # Forward pass (with gradients for encoder if fine-tuning)
             if finetune_encoder:
-                features = encoder(data)  # Gradients enabled
+                if scaler is not None:
+                    with autocast():
+                        features = encoder(data)
+                        output = classifier(features)
+                        loss = criterion(output, target)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    features = encoder(data)
+                    output = classifier(features)
+                    loss = criterion(output, target)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
             else:
                 with torch.no_grad():
-                    features = encoder(data)  # No gradients
-                
-            output = classifier(features)
-            loss = criterion(output, target)
-            
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                    if scaler is not None:
+                        with autocast():
+                            features = encoder(data)
+                    else:
+                        features = encoder(data)
+                if scaler is not None:
+                    with autocast():
+                        output = classifier(features)
+                        loss = criterion(output, target)
+                    # classifier only training uses scaler as well
+                    optimizer.zero_grad()
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    output = classifier(features)
+                    loss = criterion(output, target)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
             total_loss += loss.item()
             
         # Evaluation

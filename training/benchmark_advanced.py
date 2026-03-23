@@ -65,7 +65,7 @@ def train_with_smote(train_loader, test_loader, encoder, num_classes=3, epochs=1
     
     # Training loop
     classifier.train()
-    batch_size = 32
+    batch_size = 200
     for epoch in range(epochs):
         indices = torch.randperm(len(X_tensor))
         for i in range(0, len(X_tensor), batch_size):
@@ -235,7 +235,8 @@ def benchmark_advanced_models(train_loader, test_loader, device='cpu', quick_mod
     print("="*80)
     start = time.time()
     
-    encoder_ult = Encoder(input_channels=3, output_dim=256).to(device)
+    # Use multi-modal fusion encoder for ultimate performance (matches saved checkpoints)
+    encoder_ult = MultiModalFusionEncoder(base_filters=32, modality_dim=128, output_dim=256).to(device)
     print(f"  Training Ultimate model ({train_epochs} epochs)...")
     # train_ultimate_model returns (encoder, classifier, domain_classifier, trajectory_analyzer, best_acc)
     _, ult_classifier, ult_domain_clf, ult_traj_analyzer, _ = train_ultimate_model(

@@ -58,8 +58,8 @@ def leave_one_subject_out_cv(subject_data, encoder_class, num_classes=3, epochs=
         train_dataset = WESADDataset(train_subjects, mode='classifier')
         test_dataset = WESADDataset(test_subjects, mode='classifier')
         
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=200, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=200, shuffle=False)
         
         print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
         
